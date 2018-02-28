@@ -10,6 +10,7 @@ author: András Ecker, based on Eszter Vértes's code last update: 11.2017
 
 import os
 import sys
+import pickle
 from brian2 import *
 set_device("cpp_standalone")  # speed up the simulation with generated C++ code
 import numpy as np
@@ -29,7 +30,7 @@ def learning(spikeTrains, taup, taum, Ap, Am, wmax, w_init):
     Takes a spiking group of neurons, connects the neurons sparsely with each other,
     and learns the weight 'pattern' via STDP:
     exponential STDP: f(s) = A_p * exp(-s/tau_p) (if s > 0), where s=tpost_{spike}-tpre_{spike}
-    :param spikeTrains: list of lists (or eq. np.array) created in `../scripts/generate_spike_train.py` - spike train used for learning
+    :param spikeTrains: list of lists (or eq. np.array) created in `generate_spike_train.py` - spike train used for learning
     :param taup, taum: time constant of weight change (in ms)
     :param Ap, Am: max amplitude of weight change
     :param wmax: maximum weight (in S)
@@ -95,10 +96,12 @@ if __name__ == "__main__":
     except:
         STDP_mode = "asym"
         
+    assert STDP_mode in ["asym", "sym"]
+        
     fIn = "spikeTrainsR.npz"
-    fOut = "wmxR_%s.txt"%STDP_mode
+    fOut = "wmx_%s.txt"%STDP_mode
                
-    # STDP parameters
+    # STDP parameters (see `optimization/analyse_STDP.py`)
     if STDP_mode == "asym":
         taup = taum = 20 * ms
         Ap = 0.01
@@ -134,9 +137,10 @@ if __name__ == "__main__":
     dWee = save_selected_w(weightmx, selection)
     plot_weights(dWee, "sel_weights_%s"%mode_)
 
-    # save weightmatrix
+    # save weight matrix
     fName = os.path.join(SWBasePath, "files", fOut)
-    #np.savetxt(fName, weightmx)
+    with open(fName, "wb") as f:
+        pickle.dump(weightmx, f, protocol=pickle.HIGHEST_PROTOCOL)
 
     plt.show()
     
