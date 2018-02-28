@@ -1,0 +1,9 @@
+*~
+*pyc
+*html
+.ipynb_checkpoints
+figures/
+files/*pkl
+files/*npz
+scripts/output/
+scripts/optimization/Mishra_2016/
