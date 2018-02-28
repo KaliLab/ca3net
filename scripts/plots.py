@@ -188,7 +188,7 @@ def _select_subset(selection, ymin, ymax):
             if counter == 0:
                 break
     except:  # if there isn't any cell firing
-        subset = [400, 1000, 1500, 2300, 3600]
+        subset = [500, 1999, 4000, 6000, 7498]
     return subset
 
 
@@ -199,7 +199,7 @@ def plot_zoomed(spikeTimes, spikingNeurons, rate, title_, color_, multiplier_, P
     :param rate: firing rate - precalculated by detect_oscillation.py/preprocess_spikes
     :param title_, color_, linespec_, multiplier_: outline and naming parameters
     :param Pyr_pop: flag for calculating and returning ymin and ymax (and zooming in the plot)
-    :param sm: Brian MultiStateMonitor object or Brian2 StateMonitor object (could be more elegant...)
+    :param sm: Brian2 StateMonitor object (could be more elegant...)
     :param selection: np.array of recorded neurons (used only if Pyr_pop is true)
     return subset: see `_select_subset()`
     """
@@ -218,7 +218,7 @@ def plot_zoomed(spikeTimes, spikingNeurons, rate, title_, color_, multiplier_, P
         ymax = spikingNeurons.max()+5 if spikingNeurons.max()+5 < 8000 else 8000
         subset = _select_subset(selection, ymin, ymax)
     else:
-        ymin = 0; ymax = 1000
+        ymin = 0; ymax = 150
     
     # select trace to plot
     if sm:
@@ -230,7 +230,7 @@ def plot_zoomed(spikeTimes, spikingNeurons, rate, title_, color_, multiplier_, P
                     id_ = i
                     break             
         else:  # for Bas. pop we always plot the same
-            id_ = 500  # fixed in simulations
+            id_ = 75  # fixed in simulations
             idx = np.where(np.asarray(spikingNeurons)==id_)[0]  # spike times of given neuron (used for red dots on scatter)
     
         # get trace from monitor
