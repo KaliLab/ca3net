@@ -252,8 +252,7 @@ def load_Wee(fName):  # this function does not belong to here ... (should be eg.
     """dummy function, just to make python close the file and clear the memory"""
     
     with open(fName, "rb") as f:
-        Wee = pickle.load(fName) * 1e9
-    Wee = np.genfromtxt(fName) * 1e9
+        Wee = pickle.load(f) * 1e9
     return Wee
     
     
