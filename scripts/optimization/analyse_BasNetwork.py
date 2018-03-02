@@ -21,7 +21,7 @@ from plots import plot_PSD, plot_zoomed
 NE = 8000
 NI = 150
 eps_pyr = 0.1
-eps_bas = 0.4
+eps_bas = 0.25
 
 # synaptic parameters
 BasExc_rise = 1. * ms  # Lee 2014 (data from CA1) 
@@ -33,7 +33,7 @@ invpeak_BasInh = (BasInh_decay / BasInh_rise) ** (BasInh_rise / (BasInh_decay - 
 delay_BasExc = 0.9 * ms  # Geiger 1997 (data from DG)
 delay_BasInh = 0.6 * ms  # Bartos 2002
 E_Exc = 0.0 * mV
-E_Inh = -80.0 * mV
+E_Inh = -70.0 * mV
 z = 1 * nS
 
 # parameters for bas cells (optimized by Bence)
@@ -121,7 +121,7 @@ def run_simulation_analyse_results(exc_rate):
 if __name__ == "__main__":
 
     J_BasExc = 5.5
-    J_BasInh = 2.5
+    J_BasInh = 5.5
     exc_rates = [1.5, 1.75, 2., 2.25, 2.5]
 
     for exc_rate in exc_rates:
