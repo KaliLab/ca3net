@@ -99,7 +99,7 @@ if __name__ == "__main__":
     assert STDP_mode in ["asym", "sym"]
         
     fIn = "spikeTrainsR.npz"
-    fOut = "wmx_%s.txt"%STDP_mode
+    fOut = "wmx_%s.pkl"%STDP_mode
                
     # STDP parameters (see `optimization/analyse_STDP.py`)
     if STDP_mode == "asym":
