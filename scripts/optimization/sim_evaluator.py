@@ -6,6 +6,7 @@ authors: Bence Bagi, András Ecker last update: 11.2017
 """
 
 import os
+import gc
 import sys
 import numpy as np
 import bluepyopt as bpop
@@ -14,6 +15,19 @@ SWBasePath = os.path.sep.join(os.path.abspath('__file__').split(os.path.sep)[:-3
 # add the 'scripts' directory to the path (import the modules)
 sys.path.insert(0, os.path.sep.join([SWBasePath, 'scripts']))
 from detect_oscillations import *
+
+
+def evaluate_power(ripple, gamma):
+    """helper function to score ripple/gamma power ratio"""
+    tmp = ripple/gamma
+    scoreRG = 0
+    if tmp > 20.:
+        scoreRG = 3
+    elif 10. < tmp <= 20.:
+        scoreRG = 2
+    elif 2. <= tmp <= 10.:
+        scoreRG = 1
+    return scoreRG
 
 
 class Brian2Evaluator(bpop.evaluators.Evaluator):
@@ -40,8 +54,11 @@ class Brian2Evaluator(bpop.evaluators.Evaluator):
     def evaluate_with_lists(self, individual):
         """fitness error used by BluePyOpt for the optimization"""
         sme, smi, popre, popri = self.generate_model(individual)
+        gc.collect()
+        
         fitness = 0
         if sme.num_spikes > 0 and smi.num_spikes > 0:  # check if there is any activity
+            fitness = -1e-4
             
             # analyse spikes
             spikeTimesE, spikingNeuronsE, poprE, ISIhist, bin_edges = preprocess_monitors(sme, popre)
@@ -78,16 +95,5 @@ class Brian2Evaluator(bpop.evaluators.Evaluator):
                 fitness = -1 * (ripple_peakE + ripple_peakI + bool_gammaE + 1.5*bool_gammaI + ripple_gammaE + ripple_gammaI + 3*rateE)
         
         return [fitness]  # single score but has to be a list for BluePyOpt
-        
- 
-def evaluate_power(ripple, gamma):
-    """helper function to score ripple/gamma power ratio"""
-    tmp = ripple/gamma
-    scoreRG = 0
-    if tmp > 20.:
-        scoreRG = 3
-    elif 10. < tmp <= 20.:
-        scoreRG = 2
-    elif 2. <= tmp <= 10.:
-        scoreRG = 1
-    return scoreRG
+    
+
