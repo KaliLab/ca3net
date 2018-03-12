@@ -58,7 +58,6 @@ class Brian2Evaluator(bpop.evaluators.Evaluator):
         
         fitness = 0
         if sme.num_spikes > 0 and smi.num_spikes > 0:  # check if there is any activity
-            fitness = -1e-4
             
             # analyse spikes
             spikeTimesE, spikingNeuronsE, poprE, ISIhist, bin_edges = preprocess_monitors(sme, popre)
