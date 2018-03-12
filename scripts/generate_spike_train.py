@@ -54,7 +54,7 @@ def generate_spike_train(nNeurons, placeCell_ratio, seed=12345):
 if __name__ == "__main__":
 
     nNeurons = 8000
-    placeCell_ratio = 0.2
+    placeCell_ratio = 1.  # 0.2
 
     spikeTrains = generate_spike_train(nNeurons, placeCell_ratio)
 
