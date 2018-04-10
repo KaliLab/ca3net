@@ -64,7 +64,7 @@ if __name__ == "__main__":
     assert len(spikeTrains) == nNeurons
 
     # save results to .npz
-    fOut = "spikeTrainsR.npz"
+    fOut = "spikeTrainsR_1.npz"
     fName = os.path.join(SWBasePath, "files", fOut)
     np.savez(fName, spikeTrains=spikeTrains)
 
