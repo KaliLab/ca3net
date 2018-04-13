@@ -20,58 +20,7 @@ tRoute = lRoute / vMice  # [s]
 wMice = 2*np.pi / tRoute  # angular velocity
 
 
-def get_lambda(x, y, mPF, m):
-    """
-    calculates lambda parameter of distr. (cos(): PF prefference * exp(): vonMisses distr AKA. circular normal distr. = tuning curve on circle)
-    :param y: phase precision
-    :param mPF: mean of the (current) place field
-    :param m: prefered phase: f(current position within the place field)
-    :return: lambda: calculated lambda parameter of the Poisson process
-    """
-    
-    lambda1 = np.cos((2*np.pi) / (2 * phiPFRad) * (x - mPF))
-    lambda2 = np.exp(s * np.cos(y - m)) / np.exp(s)
-    
-    return lambda1 * lambda2
-
-
-def calc_lambda(t, phiStart, phase0):
-    """
-    calculates the lambda parameter of the Poisson process, that represent the firing rate of CA3 pyr. cells
-    (takes preferred place and phase precession into account)
-    TODO: vectorize this (instead of calling it for every t in the hom. Poisson - it could be called for the whole hom. Poisson once) 
-    :param t: time (used for calculating the current position of the mice)
-    :param phiStart: starting point of the place field
-    :param phase0: initial phase (used for modeling phase precession)
-    :return: lambda: calculated lambda parameter of the Poisson process (see: get_lambda)
-    """
-    
-    phiEnd = np.mod(phiStart + phiPFRad, 2*np.pi)
-    
-    x = np.mod(wMice * t, 2*np.pi)  # position of the mice [rad]
-
-    # first if-else is needed because of the circular tract...
-    if phiStart < phiEnd:
-        if phiStart <= x and x < phiEnd:  # if the mice is in the place field
-            mPF = phiStart + phiPFRad/2.0
-            y = phase0 + 2*np.pi * theta * t  # phase prec...
-            m = - (x - phiStart) * 2*np.pi / phiPFRad
-            lambdaP = get_lambda(x, y, mPF, m)
-        else:
-            lambdaP = 0
-    else:
-        if phiStart <= x or x < phiEnd:  # if the mice is in the place field
-            mPF = np.mod(phiStart + phiPFRad/2.0, 2*np.pi)
-            y = phase0 + 2*np.pi * theta * t  # phase prec...
-            m = - (x - phiStart) * 2*np.pi / phiPFRad
-            lambdaP = get_lambda(x, y, mPF, m)
-        else:
-            lambdaP = 0
-
-    return lambdaP
-    
-    
-def generate_exp_rand_number(lambda_, seed):
+def _generate_exp_rand_number(lambda_, seed):
     """
     MATLAB's random exponential number
     :param lambda_: rate (of the Poisson process)
@@ -93,10 +42,10 @@ def hom_poisson(lambda_, seed):
     """
     
     homP = []
-    homP.append(generate_exp_rand_number(lambda_, seed))
+    homP.append(_generate_exp_rand_number(lambda_, seed))
     i = 0
     while homP[i] < tMax:
-        exprnd = generate_exp_rand_number(lambda_, seed+i+1)
+        exprnd = _generate_exp_rand_number(lambda_, seed+i+1)
         homP.append(homP[-1] + exprnd)
         i += 1
     del homP[-1]  # delete the last element which is higher than tMax
@@ -104,9 +53,60 @@ def hom_poisson(lambda_, seed):
     return homP
 
 
+def _get_lambda(x, y, mPF, m):
+    """
+    calculates lambda parameter of distr. (cos(): PF prefference * exp(): vonMisses distr AKA. circular normal distr. = tuning curve on circle)
+    :param y: phase precision
+    :param mPF: mean of the (current) place field
+    :param m: prefered phase: f(current position within the place field)
+    :return: lambda: calculated lambda parameter of the Poisson process
+    """
+    
+    lambda1 = np.cos((2*np.pi) / (2 * phiPFRad) * (x - mPF))
+    lambda2 = np.exp(s * np.cos(y - m)) / np.exp(s)
+    
+    return lambda1 * lambda2
+
+
+def calc_lambda(t, phiStart, phase0):
+    """
+    calculates the lambda parameter of the Poisson process, that represent the firing rate of CA3 pyr. cells
+    (takes preferred place and phase precession into account)
+    TODO: vectorize this (instead of calling it for every t in the hom. Poisson - it could be called for the whole hom. Poisson once, but beware of PF!) 
+    :param t: time (used for calculating the current position of the mice)
+    :param phiStart: starting point of the place field
+    :param phase0: initial phase (used for modeling phase precession)
+    :return: lambda: calculated lambda parameter of the Poisson process (see: _get_lambda)
+    """
+    
+    phiEnd = np.mod(phiStart + phiPFRad, 2*np.pi)
+    
+    x = np.mod(wMice * t, 2*np.pi)  # position of the mice [rad]
+
+    # first if-else is needed because of the circular tract...
+    if phiStart < phiEnd:
+        if phiStart <= x and x < phiEnd:  # if the mice is in the place field
+            mPF = phiStart + phiPFRad/2.0
+            y = phase0 + 2*np.pi * theta * t  # phase prec...
+            m = - (x - phiStart) * 2*np.pi / phiPFRad
+            lambdaP = _get_lambda(x, y, mPF, m)
+        else:
+            lambdaP = 0
+    else:
+        if phiStart <= x or x < phiEnd:  # if the mice is in the place field
+            mPF = np.mod(phiStart + phiPFRad/2.0, 2*np.pi)
+            y = phase0 + 2*np.pi * theta * t  # phase prec...
+            m = - (x - phiStart) * 2*np.pi / phiPFRad
+            lambdaP = _get_lambda(x, y, mPF, m)
+        else:
+            lambdaP = 0
+
+    return lambdaP
+
+
 def inhom_poisson(lambda_, phiStart, seed, phase0=0.0):
     """
-    makes a homogenous Poisson process and converts it to inhomogenous
+    generates a homogenous Poisson process and converts it to inhomogenous
     via keeping only a subset of spikes based on the rate of the place cell (see: calc_lambda)
     :param lambda_: rate of the Poisson process (see calc_lambda)
     :param phiStart: starting point of the place field (see calc_lambda)
