@@ -32,7 +32,7 @@ def generate_spike_train(nNeurons, placeCell_ratio, seed=12345):
     phiStarts = np.sort(np.random.rand(nNeurons), kind="mergesort")[pfNeurons] * 2*np.pi
     
     # save place fields for further analysis
-    fName = os.path.join(SWBasePath, "files", "PFstarts_1_OLD.npz")
+    fName = os.path.join(SWBasePath, "files", "PFstarts_%s.npz"%placeCell_ratio)
     np.savez(fName, phiStarts=phiStarts)
     
     i = 0
@@ -54,7 +54,7 @@ def generate_spike_train(nNeurons, placeCell_ratio, seed=12345):
 
 if __name__ == "__main__":
 
-    nNeurons = 4000
+    nNeurons = 8000
     placeCell_ratio = 1.  # 0.2
 
     spikeTrains = generate_spike_train(nNeurons, placeCell_ratio)
@@ -65,7 +65,7 @@ if __name__ == "__main__":
     assert len(spikeTrains) == nNeurons
 
     # save results to .npz
-    fOut = "spikeTrainsR_1_OLD.npz"
+    fOut = "spikeTrainsR_%s.npz"%placeCell_ratio
     fName = os.path.join(SWBasePath, "files", fOut)
     np.savez(fName, spikeTrains=spikeTrains)
 
