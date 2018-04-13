@@ -7,6 +7,7 @@ authors: András Ecker, Eszter Vértes, Szabolcs Káli last update: 02.2018
 
 import os
 import numpy as np
+import random as pyrandom
 from poisson_proc import hom_poisson, inhom_poisson, refractoriness
 
 SWBasePath = os.path.sep.join(os.path.abspath(__file__).split(os.path.sep)[:-2])
@@ -25,13 +26,13 @@ def generate_spike_train(nNeurons, placeCell_ratio, seed=12345):
     """
     
     # generate random neuronIDs being place cells and starting points for place field
-    np.random.seed(12345)
-    tmp = np.sort(np.random.rand(int(nNeurons*placeCell_ratio)), kind="mergesort")
-    phiStarts = tmp * 2*np.pi
-    pfNeurons = np.floor(tmp * nNeurons)
+    np.random.seed(seed)
+    pyrandom.seed(seed)
+    pfNeurons = np.sort(pyrandom.sample(range(0, nNeurons), int(nNeurons*placeCell_ratio)), kind="mergesort")
+    phiStarts = np.sort(np.random.rand(nNeurons), kind="mergesort")[pfNeurons] * 2*np.pi
     
     # save place fields for further analysis
-    fName = os.path.join(SWBasePath, "files", "PFstarts.npz")
+    fName = os.path.join(SWBasePath, "files", "PFstarts_1_OLD.npz")
     np.savez(fName, phiStarts=phiStarts)
     
     i = 0
@@ -53,7 +54,7 @@ def generate_spike_train(nNeurons, placeCell_ratio, seed=12345):
 
 if __name__ == "__main__":
 
-    nNeurons = 8000
+    nNeurons = 4000
     placeCell_ratio = 1.  # 0.2
 
     spikeTrains = generate_spike_train(nNeurons, placeCell_ratio)
@@ -64,7 +65,7 @@ if __name__ == "__main__":
     assert len(spikeTrains) == nNeurons
 
     # save results to .npz
-    fOut = "spikeTrainsR_1.npz"
+    fOut = "spikeTrainsR_1_OLD.npz"
     fName = os.path.join(SWBasePath, "files", fOut)
     np.savez(fName, spikeTrains=spikeTrains)
 

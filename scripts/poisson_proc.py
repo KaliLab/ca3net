@@ -12,7 +12,7 @@ vMice = 32.43567842  # velocity of the mice [cm/s]
 lRoute = 300.0  # circumference [cm]
 lPlaceField = 30.0  # length of the place field [cm]
 tMax = 500.0  # [s]
-s = 2  # param of phase-locking (von Misses distribution)
+s = 2.0  # param of phase-locking (von Misses distribution)
 
 r = lRoute / (2*np.pi)  # radius [cm]
 phiPFRad = lPlaceField / r  # (angle of) place field [rad]
@@ -22,7 +22,7 @@ wMice = 2*np.pi / tRoute  # angular velocity
 
 def get_lambda(x, y, mPF, m):
     """
-    calculates lambda parameter of distr. (cos() - PF prefference * exp() - vonMisses distr)
+    calculates lambda parameter of distr. (cos(): PF prefference * exp(): vonMisses distr AKA. circular normal distr. = tuning curve on circle)
     :param y: phase precision
     :param mPF: mean of the (current) place field
     :param m: prefered phase: f(current position within the place field)
@@ -39,6 +39,7 @@ def calc_lambda(t, phiStart, phase0):
     """
     calculates the lambda parameter of the Poisson process, that represent the firing rate of CA3 pyr. cells
     (takes preferred place and phase precession into account)
+    TODO: vectorize this (instead of calling it for every t in the hom. Poisson - it could be called for the whole hom. Poisson once) 
     :param t: time (used for calculating the current position of the mice)
     :param phiStart: starting point of the place field
     :param phase0: initial phase (used for modeling phase precession)
@@ -49,18 +50,19 @@ def calc_lambda(t, phiStart, phase0):
     
     x = np.mod(wMice * t, 2*np.pi)  # position of the mice [rad]
 
+    # first if-else is needed because of the circular tract...
     if phiStart < phiEnd:
         if phiStart <= x and x < phiEnd:  # if the mice is in the place field
-            y = phase0 + 2*np.pi * theta * t
-            mPF = phiStart + phiPFRad / 2
+            mPF = phiStart + phiPFRad/2.0
+            y = phase0 + 2*np.pi * theta * t  # phase prec...
             m = - (x - phiStart) * 2*np.pi / phiPFRad
             lambdaP = get_lambda(x, y, mPF, m)
         else:
             lambdaP = 0
     else:
         if phiStart <= x or x < phiEnd:  # if the mice is in the place field
-            y = phase0 + 2*np.pi * theta * t
-            mPF = phiStart + phiPFRad / 2
+            mPF = np.mod(phiStart + phiPFRad/2.0, 2*np.pi)
+            y = phase0 + 2*np.pi * theta * t  # phase prec...
             m = - (x - phiStart) * 2*np.pi / phiPFRad
             lambdaP = get_lambda(x, y, mPF, m)
         else:
@@ -124,7 +126,7 @@ def inhom_poisson(lambda_, phiStart, seed, phase0=0.0):
     return inhP
 
 
-def refractoriness(spikeTrains, ref_per=5e-3):  # added only in 05.2017
+def refractoriness(spikeTrains, ref_per=5e-3):
     """
     delete spikes which are too close to each other
     :param spikeTrains: list of lists representing individual spike trains
