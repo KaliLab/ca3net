@@ -22,6 +22,10 @@ figFolder = os.path.join(SWBasePath, "figures")
 v_spike_Pyr = 19.85800072  # (optimized by Bence)
 v_spike_Bas = -17.48690645  # (optimized by Bence)
 
+nPC = 8000
+nBC = 150
+len_sim = 10000  # ms
+
 
 def _avg_rate(rate, bin_, zoomed=False):
     """
@@ -31,9 +35,9 @@ def _avg_rate(rate, bin_, zoomed=False):
     :param zoomed: bool for zoomed in plots
     """
         
-    t = np.linspace(0, 10000, len(rate))
+    t = np.linspace(0, len_sim, len(rate))
     t0 = 0 if not zoomed else 9900
-    t1 = np.arange(t0, 10000, bin_)
+    t1 = np.arange(t0, len_sim, bin_)
     t2 = t1 + bin_    
     avg_rate = np.zeros_like(t1, dtype=np.float)
     for i, (t1_, t2_) in enumerate(zip(t1, t2)):
@@ -60,16 +64,16 @@ def plot_raster_ISI(spikeTimes, spikingNeurons, rate, hist, color_, multiplier_)
     ax = fig.add_subplot(gs[0])
     ax.scatter(spikeTimes, spikingNeurons, c=color_, marker='.', linewidth=0)
     ax.set_title("Pyr_population raster")
-    ax.set_xlim([0, 10000])    
-    ax.set_ylim([0, 8000])
+    ax.set_xlim([0, len_sim])    
+    ax.set_ylim([0, nPC])
     ax.set_ylabel("Neuron number")
     
     bin_ = 20
     avg_rate = _avg_rate(rate, bin_)
      
     ax2 = fig.add_subplot(gs[1])
-    ax2.bar(np.linspace(0, 10000, len(avg_rate)), avg_rate, width=bin_, align="edge", color=color_, edgecolor="black", linewidth=0.5, alpha=0.9)
-    ax2.set_xlim([0, 10000])
+    ax2.bar(np.linspace(0, len_sim, len(avg_rate)), avg_rate, width=bin_, align="edge", color=color_, edgecolor="black", linewidth=0.5, alpha=0.9)
+    ax2.set_xlim([0, len_sim])
     ax2.set_xlabel("Time (ms)")
     ax2.set_ylabel("Rate (Hz)")
 
@@ -131,7 +135,7 @@ def plot_PSD(rate, rAC, f, Pxx, title_, color_, multiplier_, TFR=False, tfr=None
         ax4.grid(True)
         ax4.set_title("TFR (Morlet scalogram)")
         ax4.set_xlabel("Time (ms)")
-        ax4.set_xlim([0, 10000])
+        ax4.set_xlim([0, len_sim])
         ax4.set_ylabel("Frequency (Hz)")
         ax4.set_ylim([2, 250])
     
@@ -144,8 +148,8 @@ def plot_PSD(rate, rAC, f, Pxx, title_, color_, multiplier_, TFR=False, tfr=None
         ax2 = fig.add_subplot(3, 1, 2)
         ax3 = fig.add_subplot(3, 1, 3)
        
-    ax.bar(np.linspace(0, 10000, len(avg_rate)), avg_rate, width=bin_, align="edge", color=color_, edgecolor="black", linewidth=0.5, alpha=0.9)
-    ax.set_xlim([0, 10000])
+    ax.bar(np.linspace(0, len_sim, len(avg_rate)), avg_rate, width=bin_, align="edge", color=color_, edgecolor="black", linewidth=0.5, alpha=0.9)
+    ax.set_xlim([0, len_sim])
     ax.set_title("%s rate"%title_)
     ax.set_ylabel("Rate (Hz)")
     
@@ -203,9 +207,11 @@ def plot_zoomed(spikeTimes, spikingNeurons, rate, title_, color_, multiplier_, P
     :param selection: np.array of recorded neurons (used only if Pyr_pop is true)
     return subset: see `_select_subset()`
     """
+    
+    zoom_from = len_sim - 100  # ms
 
     # get last 100ms of raster
-    ROI = [np.where(spikeTimes > 9900)[0]]  # hard coded for 10000ms...
+    ROI = [np.where(spikeTimes > zoom_from)[0]]  # hard coded for 10000ms...
     spikeTimes = spikeTimes[ROI]; spikingNeurons = spikingNeurons[ROI]
     
     # average rate 
@@ -215,10 +221,10 @@ def plot_zoomed(spikeTimes, spikingNeurons, rate, title_, color_, multiplier_, P
     # set boundaries
     if Pyr_pop:        
         ymin = spikingNeurons.min()-5 if spikingNeurons.min()-5 > 0 else 0
-        ymax = spikingNeurons.max()+5 if spikingNeurons.max()+5 < 8000 else 8000
+        ymax = spikingNeurons.max()+5 if spikingNeurons.max()+5 < nPC else nPC
         subset = _select_subset(selection, ymin, ymax)
     else:
-        ymin = 0; ymax = 150
+        ymin = 0; ymax = nBC
     
     # select trace to plot
     if sm:
@@ -230,7 +236,7 @@ def plot_zoomed(spikeTimes, spikingNeurons, rate, title_, color_, multiplier_, P
                     id_ = i
                     break             
         else:  # for Bas. pop we always plot the same
-            id_ = 75  # fixed in simulations
+            id_ = nBC/2  # fixed in simulations
             idx = np.where(np.asarray(spikingNeurons)==id_)[0]  # spike times of given neuron (used for red dots on scatter)
     
         # get trace from monitor
@@ -256,26 +262,26 @@ def plot_zoomed(spikeTimes, spikingNeurons, rate, title_, color_, multiplier_, P
             else:
                 ax.scatter(spikeTimes[idx], spikingNeurons[idx], c="red", marker='.', linewidth=0)
     ax.set_title("%s raster (last 100 ms)"%title_)
-    ax.set_xlim([9900, 10000])
+    ax.set_xlim([zoom_from, len_sim])
     ax.set_ylim([ymin, ymax])
     ax.set_ylabel("Neuron number")
     if sm and Pyr_pop:
         ax.legend()
  
     ax2 = fig.add_subplot(gs[1])
-    ax2.bar(np.linspace(9900, 10000, len(avg_rate)), avg_rate, width=bin_, align="edge", color=color_, edgecolor="black", linewidth=0.5, alpha=0.9)
-    ax2.set_xlim([9900, 10000]) 
+    ax2.bar(np.linspace(zoom_from, len_sim, len(avg_rate)), avg_rate, width=bin_, align="edge", color=color_, edgecolor="black", linewidth=0.5, alpha=0.9)
+    ax2.set_xlim([zoom_from, len_sim]) 
     ax2.set_ylabel("Rate (Hz)")
     
     if sm:   
         ax3 = fig.add_subplot(gs[2])
         if len(idx) != 0:
-            ax3.plot(t[np.where((9900 <= t) & (t < 10000))], v[np.where((9900 <= t) & (t < 10000))], linewidth=2, c=color_,)
+            ax3.plot(t[np.where((zoom_from <= t) & (t < len_sim))], v[np.where((zoom_from <= t) & (t < len_sim))], linewidth=2, c=color_,)
             tmp = v_spike_Pyr * np.ones_like(idx, dtype=np.float) if Pyr_pop else v_spike_Bas * np.ones_like(idx, dtype=np.float)
             ax3.plot(spikeTimes[idx], tmp, c="red", marker='.', linewidth=0, label=id_)
         else:
-            ax3.plot(t[np.where((9900 <= t) & (t < 10000))], v[np.where((9900 <= t) & (t < 10000))], linewidth=2, c=color_, label=id_)
-        ax3.set_xlim([9900, 10000])
+            ax3.plot(t[np.where((zoom_from <= t) & (t < len_sim))], v[np.where((zoom_from <= t) & (t < len_sim))], linewidth=2, c=color_, label=id_)
+        ax3.set_xlim([zoom_from, len_sim])
         ax3.set_xlabel("Time (ms)")
         ax3.set_ylabel("Vm (mV)")
         ax3.legend()
@@ -298,6 +304,8 @@ def plot_detailed(msM, subset, multiplier_, plot_adaptation=True, new_network=Fa
     :param plot_adaptation: boolean flag for plotting adaptation var.
     :param new_network: boolean flag for plotting AMPA conductance (in the new network it's a sum)
     """
+    
+    zoom_from = len_sim - 100  # ms
 
     fig = plt.figure(figsize=(15, 8))
     #fig.suptitle("Detailed plots of selected vars. (Pyr. pop)")
@@ -332,25 +340,25 @@ def plot_detailed(msM, subset, multiplier_, plot_adaptation=True, new_network=Fa
 
     ax.set_title("Membrane potential (last 100 ms)")
     ax.set_ylabel("V (mV)")
-    ax.set_xlim([9900, 10000])
+    ax.set_xlim([zoom_from, len_sim])
     ax.legend()
 
     ax2.set_title("Adaptation variable (last 100 ms)")
     ax2.set_ylabel("w (pA)")
-    ax2.set_xlim([9900, 10000])
+    ax2.set_xlim([zoom_from, len_sim])
     if plot_adaptation:
         ax2.legend()
 
     ax3.set_title("Exc. inputs (last 100 ms)")
     ax3.set_xlabel("Time (ms)")
     ax3.set_ylabel("g_AMPA (nS)")
-    ax3.set_xlim([9900, 10000])
+    ax3.set_xlim([zoom_from, len_sim])
     ax3.legend()
 
     ax4.set_title("Inh. inputs (last 100 ms)")
     ax4.set_xlabel("Time (ms)")
     ax4.set_ylabel("g_GABA (nS)")
-    ax4.set_xlim([9900, 10000])
+    ax4.set_xlim([zoom_from, len_sim])
     ax4.legend()
 
     fig.tight_layout()
@@ -430,9 +438,9 @@ def plot_wmx_avg(wmx, nPop, saveName_):
     :param saveName_: name of saved img
     """
 
-    assert 8000 % nPop == 0
+    assert nPC % nPop == 0
 
-    popSize = int(8000.0 / nPop)
+    popSize = int(nPC / nPop)
     wmxM = np.zeros((100, 100))
     for i in range(nPop):
         for j in range(nPop):
@@ -510,7 +518,7 @@ def plot_weights(dWee, saveName_):
     ax.set_title("Incomming exc. weights")
     ax.set_xlabel("#Neuron")
     ax.set_ylabel("Weight (nS)")
-    ax.set_xlim([0, 8000])
+    ax.set_xlim([0, nPC])
     ax.legend()
 
     figName = os.path.join(figFolder, "%s.png"%saveName_)
