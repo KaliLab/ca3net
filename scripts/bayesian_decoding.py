@@ -10,6 +10,7 @@ import os
 import numpy as np
 from scipy.misc import factorial
 import matplotlib.pyplot as plt
+from plots import *
 
 SWBasePath = os.path.sep.join(os.path.abspath('__file__').split(os.path.sep)[:-2])
 
@@ -31,7 +32,7 @@ phiPFRad = lPlaceField / r  # (angle of) place field [rad]
 avgRate_inField = 20.0  # avg. in-field firing rate [Hz]
     
     
-def load_spikes(fName, nNeurons):
+def load_spikes(fName):
     """loads in spike times and corresponding neuron IDs"""
     
     npzFile = np.load(fName)
@@ -41,12 +42,11 @@ def load_spikes(fName, nNeurons):
     return spikeTimes, spikingNeurons
 
 
-def extract_binspikecount_data(spikeTimes, spikingNeurons, nNeurons):
+def extract_binspikecount(spikeTimes, spikingNeurons):
     """
     Builds container of spike counts in a given interval (bin) - in order to save time in log(likelihood) calculation
     :param spikeTimes: np.array of ordered spike times (saved and loaded in ms)
     :param spikingNeurons: np.array (same shape as spikeTimes) with corresponding neuron IDs
-    :param nNeurons: total number of neurons
     :return: list (1 entry for every 5ms time bin) of dictionaries {i: n_i}
     """
     
@@ -113,7 +113,8 @@ def calc_log_likelihoods(lBin_spike_counts, dX_tau, verbose=True):
     """
     Calculates log(likelihood) based on Davison et al. 2009
     log(likelihood): log(Pr(spikes|x)) = \sum_{i=1}^N n_ilog(\frac{\Delta t \tau_i(x)}{n_i!}) - \Delta t \sum_{i=1}^N \tau_i(x)
-    :param lBin_spike_counts: list (1 entry for every 5ms time bin) of dictionaries {i: n_i} - see extract_binspikecount_data()
+    #TODO: investigate into parallization of this...
+    :param lBin_spike_counts: list (1 entry for every 5ms time bin) of dictionaries {i: n_i} - see extract_binspikecount()
     :param dX_tau: dictionary {x: [neuronIDs] + [tau_i(x)s] (where tau_i(x) isn't 0)} - see build_tau_dict()
     return: list (1 entry for every 5ms time bin) of dictionaries x: log_likelihood
     """
@@ -121,18 +122,18 @@ def calc_log_likelihoods(lBin_spike_counts, dX_tau, verbose=True):
     delta_t = temporal_res * 1e-3  # convert back to second
     
     lLog_likelihoods = []
-    for it, dNum_spikes in enumerate(lBin_spike_counts): # iterate over time bins
+    for it, dNum_spikes in enumerate(lBin_spike_counts):  # iterate over time bins
         dLog_likelihoods = {}
         for x, dNeuronIDs_Taus in dX_tau.iteritems():  # iterate over all spatial points
         
-            log_likelihood = 0 
+            log_likelihood = 0
             for i, neuronID in enumerate(dNeuronIDs_Taus["neuronIDs"]):  # iterate over neurons whose tau isn't 0 in that point (instead of iterating over all of them...)
             
-                tau_i = dNeuronIDs_Taus["taus"][i]
-                log_likelihood += delta_t * tau_i  # second part of the sum (n_i independent)
                 n_i = dNum_spikes[neuronID]
+                tau_i = dNeuronIDs_Taus["taus"][i]
                 if n_i != 0.0:  # (tau_i won't be zero! - see above)
-                    log_likelihood += n_i * np.log((delta_t * tau_i) / factorial(n_i).item())  # first part of the sum
+                    log_likelihood += n_i * np.log((delta_t * tau_i) / factorial(n_i).item())
+                    log_likelihood -= delta_t * tau_i
                     
             dLog_likelihoods[x] = log_likelihood
         lLog_likelihoods.append(dLog_likelihoods)
@@ -141,15 +142,36 @@ def calc_log_likelihoods(lBin_spike_counts, dX_tau, verbose=True):
                 print "1000 ms processed"
     
     return lLog_likelihoods
+
+
+def get_posterior(lLog_likelihoods):
+    """
+    Calculates posterior distribution Pr(x|spikes) for every time bin (assuming uniform prior)
+    #TODO: update prior insted of leaving it uniform?
+    """
     
+    X_posterior = np.zeros((spatial_points.size ,temporal_points.size))
+    
+    for i, dLog_likelihoods in enumerate(lLog_likelihoods):  # iterate over time bins
+        idx = np.argsort(np.asarray(dLog_likelihoods.keys()))  # sorting from x
+        log_likelihoods = np.asarray(dLog_likelihoods.values())[idx]
+        likelihoods = np.exp(log_likelihoods)
+        likelihoods[np.where(likelihoods == 1.0)] = 0.0  # exp(0) = 1, but we want 0s there...
+        if np.sum(likelihoods) != 0:
+            X_posterior[:, i] = likelihoods/np.sum(likelihoods)
+        else:
+            X_posterior[:, i] = np.zeros(spatial_points.size)        
+        
+    return X_posterior
+
 
 if __name__ == "__main__":
 
     fIn = "spikeTimesNeurons_OLD.npz"
     fName = os.path.join(SWBasePath, "files", fIn)
-    spikeTimes, spikingNeurons = load_spikes(fName, nNeurons)
+    spikeTimes, spikingNeurons = load_spikes(fName)
     
-    lBin_spike_counts = extract_binspikecount_data(spikeTimes, spikingNeurons, nNeurons)
+    lBin_spike_counts = extract_binspikecount(spikeTimes, spikingNeurons)
     
     fIn = "PFstarts_OLD.npz"
     fName = os.path.join(SWBasePath, "files", fIn)
@@ -161,16 +183,10 @@ if __name__ == "__main__":
     print "preprocessing done!"
     
     lLog_likelihoods = calc_log_likelihoods(lBin_spike_counts, dX_tau)
-    
-    
-    """
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(1, 1, 1)
-    ax.plot(dTuning_curves[3900])
+    X_posterior = get_posterior(lLog_likelihoods)
+    plot_posterior(X_posterior, temporal_res, "posterior")
     plt.show()
-    """
     
-
 
 
 

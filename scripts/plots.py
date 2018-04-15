@@ -22,8 +22,8 @@ figFolder = os.path.join(SWBasePath, "figures")
 v_spike_Pyr = 19.85800072  # (optimized by Bence)
 v_spike_Bas = -17.48690645  # (optimized by Bence)
 
-nPC = 8000
-nBC = 150
+nPC = 4000
+nBC = 1000
 len_sim = 10000  # ms
 
 
@@ -523,6 +523,34 @@ def plot_weights(dWee, saveName_):
 
     figName = os.path.join(figFolder, "%s.png"%saveName_)
     fig.savefig(figName)
+
+
+def plot_posterior(X_posterior, temporal_res, saveName_):
+    """
+    Plot posterior distribution Pr(x|spikes) for every given time bin
+    :param X_posterior: posterior matrix (see bayesian_decoding.py)
+    :param temporal_res: temporal resolution/binning (ms)
+    :param saveName_: name of saved img
+    """
+    
+    temporal_points = np.arange(0, len_sim, temporal_res)
+
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(1, 1, 1)
+    # this is a bit hacky but imshow() is just a huge blue image (thanks to many 0s)
+    idx = np.where(X_posterior != 0.0)
+    i = ax.scatter(idx[1]*temporal_res, idx[0]*(np.pi/180.0), c=X_posterior[idx].flatten(), s=1, cmap=plt.get_cmap("jet"), alpha=0.75)
+    fig.colorbar(i)
+    ax.scatter(temporal_points, np.argmax(X_posterior, axis=0)*(np.pi/180.0), c="red", s=2, label="ML estimate")
+    ax.set_title("Posterior distribution Pr(x|spikes)")
+    ax.set_xlim([0, len_sim])
+    ax.set_xlabel("Time (ms)")
+    ax.set_ylim([0, 2*np.pi])
+    ax.set_ylabel("x Place along the circle (rad)")
+    ax.legend()
+
+    figName = os.path.join(figFolder, "%s.png"%saveName_)
+    fig.savefig(figName)  
 
 
 def plot_summary_replay(multipliers, replay_interval, rateE, rateI):
