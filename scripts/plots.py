@@ -214,8 +214,8 @@ def plot_zoomed(spikeTimes, spikingNeurons, rate, title_, color_, multiplier_, P
     ROI = [np.where(spikeTimes > zoom_from)[0]]  # hard coded for 10000ms...
     spikeTimes = spikeTimes[ROI]; spikingNeurons = spikingNeurons[ROI]
     
-    # average rate 
-    bin_ = 1.5
+    # average rate
+    bin_ = 2
     avg_rate = _avg_rate(rate, bin_, zoomed=True)
     
     # set boundaries
