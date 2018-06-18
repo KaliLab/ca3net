@@ -22,8 +22,8 @@ figFolder = os.path.join(SWBasePath, "figures")
 v_spike_Pyr = 19.85800072  # (optimized by Bence)
 v_spike_Bas = -17.48690645  # (optimized by Bence)
 
-nPC = 4000
-nBC = 1000
+nPC = 8000
+nBC = 150
 len_sim = 10000  # ms
 
 
@@ -112,8 +112,8 @@ def plot_PSD(rate, rAC, f, Pxx, title_, color_, multiplier_, TFR=False, tfr=None
     rEACPlot = rAC[2:201] # 500 - 5 Hz interval
     # get gamma and ripple range
     f = np.asarray(f)    
-    fRipple = f[np.where((160 < f) & (f < 230))]; PxxRipple = Pxx[np.where((160 < f) & (f < 230))]
-    fGamma = f[np.where((30 < f) & (f < 100))]; PxxGamma = Pxx[np.where((30 < f) & (f < 100))]
+    fRipple = f[np.where((160 < f) & (f < 210))]; PxxRipple = Pxx[np.where((160 < f) & (f < 210))]
+    fGamma = f[np.where((30 < f) & (f < 80))]; PxxGamma = Pxx[np.where((30 < f) & (f < 80))]
     PxxPlot = 10 * np.log10(Pxx / max(Pxx))
     PxxRipplePlot = 10 * np.log10(PxxRipple / max(Pxx))
     PxxGammaPlot = 10 * np.log10(PxxGamma / max(Pxx))
@@ -160,8 +160,8 @@ def plot_PSD(rate, rAC, f, Pxx, title_, color_, multiplier_, TFR=False, tfr=None
     ax2.set_ylabel("AutoCorrelation")
     
     ax3.plot(f, PxxPlot, color=color_, marker='o')
-    ax3.plot(fRipple, PxxRipplePlot, 'r-', marker='o', linewidth=1.5, label="ripple (160-230Hz)")
-    ax3.plot(fGamma, PxxGammaPlot, 'k-', marker='o', linewidth=1.5, label="gamma (30-100Hz)")
+    ax3.plot(fRipple, PxxRipplePlot, 'r-', marker='o', linewidth=1.5, label="ripple (160-210Hz)")
+    ax3.plot(fGamma, PxxGammaPlot, 'k-', marker='o', linewidth=1.5, label="gamma (30-80Hz)")
     ax3.set_title("Power Spectrum Density")
     ax3.set_xlim([0, 500])
     ax3.set_xlabel("Frequency (Hz)")

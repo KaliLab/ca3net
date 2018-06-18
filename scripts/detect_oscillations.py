@@ -213,7 +213,7 @@ def ripple(rAC, f, Pxx, p=0.01):
     
     # get ripple freq
     f = np.asarray(f)
-    PxxRipple = Pxx[np.where((160 < f) & (f < 230))]
+    PxxRipple = Pxx[np.where((160 < f) & (f < 210))]
     
     # apply Fisher g-test
     pVal = _fisher(PxxRipple)
@@ -236,7 +236,7 @@ def gamma(f, Pxx, p=0.01):
 
     # get gamma freq
     f = np.asarray(f)
-    PxxGamma = Pxx[np.where((30 < f) & (f < 100))]
+    PxxGamma = Pxx[np.where((30 < f) & (f < 80))]
     
     # apply Fisher g-test
     pVal = _fisher(PxxGamma)
@@ -246,10 +246,11 @@ def gamma(f, Pxx, p=0.01):
     gammaP = (sum(PxxGamma) / sum(Pxx)) * 100
 
     return avgGammaF, gammaP
-    
-    
-def load_Wee(fName):  # this function does not belong to here ... (should be eg. in helpers)
-    """dummy function, just to make python close the file and clear the memory"""
+ 
+
+# this function doesn't belong here ... (should be eg. in helpers)
+def load_Wee(fName):  
+    """dummy function to load in Wee and make python clear the memory"""
     
     with open(fName, "rb") as f:
         Wee = pickle.load(f) * 1e9
