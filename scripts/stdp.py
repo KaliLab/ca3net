@@ -1,10 +1,8 @@
-#!/usr/bin/python
 # -*- coding: utf8 -*-
 """
-loads in hippocampal like spike train (produced by generate_spike_train.py) and runs STD learning rule in a recurrent spiking neuron population
--> creates learned weight matrix for PC population, used by spw* scripts
-see more: https://drive.google.com/file/d/0B089tpx89mdXZk55dm0xZm5adUE/view
-updated to produce sym stdp curve as reported in Mishra et al. 2016 - 10.1038/ncomms11552 (+ transported to brian2)
+Loads in hippocampal like spike train (produced by `generate_spike_train.py`) and runs STD learning rule in a recurrent spiking neuron population
+-> creates learned weight matrix for PC population, used by `spw*` scripts
+updated to produce symmetric STDP curve as reported in Mishra et al. 2016 - 10.1038/ncomms11552
 author: András Ecker, based on Eszter Vértes's code last update: 11.2017
 """
 
@@ -18,45 +16,47 @@ import random as pyrandom
 import matplotlib.pyplot as plt
 from plots import *
 
-SWBasePath = os.path.sep.join(os.path.abspath('__file__').split(os.path.sep)[:-2])
+
+base_path = os.path.sep.join(os.path.abspath("__file__").split(os.path.sep)[:-2])
+
+eps_pyr = 0.1  # sparseness
+n_neurons = 8000
 
 
-eps_pyr = 0.1 # sparseness
-N = 8000  # #{neurons}
+def load_spike_trains(f_name):
+    """Loads in spike trains and converts it to 2 np.arrays for Brian2's SpikeGeneratorGroup"""
+
+    npz_f = np.load(f_name)
+    spike_trains = npz_f["spike_trains"]
+
+    spiking_neurons = 0 * np.ones_like(spike_trains[0])
+    spike_times = np.asarray(spike_trains[0])
+    for neuron_id in range(1, n_neurons):
+        tmp = neuron_id * np.ones_like(spike_trains[neuron_id])
+        spiking_neurons = np.concatenate((spiking_neurons, tmp), axis=0)
+        spike_times = np.concatenate((spike_times, np.asarray(spike_trains[neuron_id])), axis=0)
+        
+    return spiking_neurons, spike_times
 
  
-def learning(spikeTrains, taup, taum, Ap, Am, wmax, w_init):
+def learning(spiking_neurons, spike_times, taup, taum, Ap, Am, wmax, w_init):
     """
-    Takes a spiking group of neurons, connects the neurons sparsely with each other,
-    and learns the weight 'pattern' via STDP:
+    Takes a spiking group of neurons, connects the neurons sparsely with each other, and learns the weight 'pattern' via STDP:
     exponential STDP: f(s) = A_p * exp(-s/tau_p) (if s > 0), where s=tpost_{spike}-tpre_{spike}
-    :param spikeTrains: list of lists (or eq. np.array) created in `generate_spike_train.py` - spike train used for learning
+    :param spiking_neurons, spike_times: np.arrays for Brian2's SpikeGeneratorGroup (list of lists created by `generate_spike_train.py`) - spike train used for learning
     :param taup, taum: time constant of weight change (in ms)
     :param Ap, Am: max amplitude of weight change
     :param wmax: maximum weight (in S)
     :param w_init: initial weights (in S)
     :return weightmx: numpy ndarray with the learned synaptic weights
-            spikeM: SpikeMonitor of the network (for plotting and further analysis)
-            mode_: ['asym', 'sym'] just for saving conventions (see saved wmx figures)
     """
-    
-    mode_ = plot_STDP_rule(taup/ms, taum/ms, Ap/1e-9, Am/1e-9, "STDP_rule")
-    
-    # create 2 numpy arrays for Brian2's SpikeGeneratorGroup
-    spikingNrns = 0 * np.ones_like(spikeTrains[0])
-    spikeTimes = np.asarray(spikeTrains[0])
-    for neuron in range(1, N):
-        nrn = neuron * np.ones_like(spikeTrains[neuron])
-        spikingNrns = np.concatenate((spikingNrns, nrn), axis=0)
-        tmp = np.asarray(spikeTrains[neuron])
-        spikeTimes = np.concatenate((spikeTimes, tmp), axis=0)
-
-    print "spike times loaded"
-    
-    PC = SpikeGeneratorGroup(N, spikingNrns, spikeTimes*second)
     
     np.random.seed(12345)
     pyrandom.seed(12345)
+    
+    plot_STDP_rule(taup/ms, taum/ms, Ap/1e-9, Am/1e-9, "STDP_rule")
+    
+    PC = SpikeGeneratorGroup(n_neurons, spiking_neurons, spike_times*second)
 
     # mimics Brian1's exponentialSTPD class, with interactions='all', update='additive'
     # see more on conversion: http://brian2.readthedocs.io/en/stable/introduction/brian1_to_2/synapses.html
@@ -78,15 +78,12 @@ def learning(spikeTrains, taup, taum, Ap, Am, wmax, w_init):
     STDP.connect(condition="i!=j", p=eps_pyr)
     STDP.w = w_init
 
-    # run simulation
-    spikeM = SpikeMonitor(PC, record=True)
-    run(400*second, report="text")  # the generated spike train is 500 sec long...
+    run(400*second, report="text")
     
-    # weight matrix
-    weightmx = np.zeros((8000, 8000))
+    weightmx = np.zeros((n_neurons, n_neurons))
     weightmx[STDP.i[:], STDP.j[:]] = STDP.w[:]
 
-    return weightmx, spikeM, mode_
+    return weightmx
 
 
 if __name__ == "__main__":
@@ -94,54 +91,49 @@ if __name__ == "__main__":
     try:
         STDP_mode = sys.argv[1]       
     except:
-        STDP_mode = "asym"
-        
+        STDP_mode = "asym"        
     assert STDP_mode in ["asym", "sym"]
-        
-    fIn = "spikeTrainsR_1.npz"
-    fOut = "wmx_%s_1.pkl"%STDP_mode
+    
+    place_cell_ratio = 0.5        
+    f_in = "spike_trains_%.1f.npz"%place_cell_ratio
+    f_out = "wmx_%s_%.1f.pkl"%(STDP_mode, place_cell_ratio)
                
     # STDP parameters (see `optimization/analyse_STDP.py`)
     if STDP_mode == "asym":
         taup = taum = 20 * ms
         Ap = 0.01
         Am = -Ap
-        wmax = 40e-9  # S (w is dimensionless in the equations)
-        scale_factor = 1.  # scaling factor necessary to get replay with the new cell models (not sure if this it should be here or somewhere else)
+        wmax = 40e-9  # S
+        scale_factor = 3.
     elif STDP_mode == "sym":
         taup = taum = 62.5 * ms
-        Ap = Am = 0.006
-        wmax = 10e-9  # S (w is dimensionless in the equations)
-        scale_factor = 1. # scaling factor necessary to get replay with the new cell models (not sure if this it should be here or somewhere else)
-    Ap *= wmax  # needed to reproduce Brian1 results
-    Am *= wmax  # needed to reproduce Brian1 results
-    w_init = 0.1e-9  # S (w is dimensionless in the equations)
-        
-    # importing spike times from file
-    fName = os.path.join(SWBasePath, "files", fIn)
-    npzFile = np.load(fName)
-    spikeTrains = npzFile["spikeTrains"]
+        Ap = Am = 0.005
+        wmax = 20e-9  # S
+        scale_factor = 1.4
+    Ap *= wmax; Am *= wmax  # needed to reproduce Brian1 results
+    w_init = 0.1e-9  # S
+          
+    f_name = os.path.join(base_path, "files", f_in)
+    spiking_neurons, spike_times = load_spike_trains(f_name)
     
-    weightmx, spikeM, mode_ = learning(spikeTrains, taup, taum, Ap, Am, wmax, w_init)
+    weightmx = learning(spiking_neurons, spike_times, taup, taum, Ap, Am, wmax, w_init)
     #weightmx *= scale_factor  # quick and dirty additional scaling! (in an ideal world the STDP parameters should be changed to include this scaling...)
     
-    assert STDP_mode == mode_, "Inconsistency (detected during plotting STDP rule) in sym vs. asym STDP rule"
-    
-    
-    # Plots (beware of additional scaling - compared to the STDP rule plot... - see above)
-    plot_wmx(weightmx, "wmx_%s"%mode_)
-    plot_wmx_avg(weightmx, 100, "wmx_avg_%s"%mode_)
-    plot_w_distr(weightmx, "w_distr_%s"%mode_)
-
-    selection = np.array([500, 1999, 4000, 6000, 7498])  # some random neuron IDs to save weigths
-    dWee = save_selected_w(weightmx, selection)
-    plot_weights(dWee, "sel_weights_%s"%mode_)
-
-    # save weight matrix
-    fName = os.path.join(SWBasePath, "files", fOut)
-    with open(fName, "wb") as f:
+    pklf_name = os.path.join(base_path, "files", f_out)
+    with open(pklf_name, "wb") as f:
         pickle.dump(weightmx, f, protocol=pickle.HIGHEST_PROTOCOL)
 
+
+    plot_wmx(weightmx, "wmx_%s"%STDP_mode)
+    plot_wmx_avg(weightmx, 100, "wmx_avg_%s"%STDP_mode)
+    plot_w_distr(weightmx, "w_distr_%s"%STDP_mode)
+
+    selection = np.array([500, 1999, 4000, 6000, 7498])
+    dWee = save_selected_w(weightmx, selection)
+    plot_weights(dWee, "sel_weights_%s"%STDP_mode)
     plt.show()
+
+    
+   
     
     
