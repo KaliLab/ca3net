@@ -9,18 +9,18 @@ author: András Ecker, based on Eszter Vértes's code last update: 11.2017
 import os
 import sys
 import pickle
-from brian2 import *
-set_device("cpp_standalone")  # speed up the simulation with generated C++ code
 import numpy as np
 import random as pyrandom
+from brian2 import *
+set_device("cpp_standalone")  # speed up the simulation with generated C++ code
 import matplotlib.pyplot as plt
 from plots import *
 
 
 base_path = os.path.sep.join(os.path.abspath("__file__").split(os.path.sep)[:-2])
 
-eps_pyr = 0.1  # sparseness
-n_neurons = 8000
+connection_prob_PC = 0.1  # sparseness
+nPCs = 8000
 
 
 def load_spike_trains(f_name):
@@ -31,7 +31,7 @@ def load_spike_trains(f_name):
 
     spiking_neurons = 0 * np.ones_like(spike_trains[0])
     spike_times = np.asarray(spike_trains[0])
-    for neuron_id in range(1, n_neurons):
+    for neuron_id in range(1, nPCs):
         tmp = neuron_id * np.ones_like(spike_trains[neuron_id])
         spiking_neurons = np.concatenate((spiking_neurons, tmp), axis=0)
         spike_times = np.concatenate((spike_times, np.asarray(spike_trains[neuron_id])), axis=0)
@@ -48,7 +48,7 @@ def learning(spiking_neurons, spike_times, taup, taum, Ap, Am, wmax, w_init):
     :param Ap, Am: max amplitude of weight change
     :param wmax: maximum weight (in S)
     :param w_init: initial weights (in S)
-    :return weightmx: numpy ndarray with the learned synaptic weights
+    :return weightmx: learned synaptic weights
     """
     
     np.random.seed(12345)
@@ -56,7 +56,7 @@ def learning(spiking_neurons, spike_times, taup, taum, Ap, Am, wmax, w_init):
     
     plot_STDP_rule(taup/ms, taum/ms, Ap/1e-9, Am/1e-9, "STDP_rule")
     
-    PC = SpikeGeneratorGroup(n_neurons, spiking_neurons, spike_times*second)
+    PC = SpikeGeneratorGroup(nPCs, spiking_neurons, spike_times*second)
 
     # mimics Brian1's exponentialSTPD class, with interactions='all', update='additive'
     # see more on conversion: http://brian2.readthedocs.io/en/stable/introduction/brian1_to_2/synapses.html
@@ -75,15 +75,27 @@ def learning(spiking_neurons, spike_times, taup, taum, Ap, Am, wmax, w_init):
             w = clip(w + A_pre, 0, wmax)
             """)
              
-    STDP.connect(condition="i!=j", p=eps_pyr)
+    STDP.connect(condition="i!=j", p=connection_prob_PC)
     STDP.w = w_init
 
     run(400*second, report="text")
     
-    weightmx = np.zeros((n_neurons, n_neurons))
+    weightmx = np.zeros((nPCs, nPCs))
     weightmx[STDP.i[:], STDP.j[:]] = STDP.w[:]
 
     return weightmx
+
+
+def save_wmx(weightmx, pklf_name):
+    """
+    Dummy function to save the weight matrix and make python clear the memory
+    :param weightmx: synaptic weight matrix to save
+    :param pklf_name: file name of the saved weight matrix
+    """
+
+    np.fill_diagonal(weightmx, 0.0)
+    with open(pklf_name, "wb") as f:
+        pickle.dump(weightmx, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 if __name__ == "__main__":
@@ -103,34 +115,31 @@ if __name__ == "__main__":
         taup = taum = 20 * ms
         Ap = 0.01
         Am = -Ap
-        wmax = 40e-9  # S
-        scale_factor = 3.
+        wmax = 4e-8  # S
+        scale_factor = 3.55
     elif STDP_mode == "sym":
         taup = taum = 62.5 * ms
-        Ap = Am = 0.005
-        wmax = 20e-9  # S
-        scale_factor = 1.4
+        Ap = Am = 5e-3
+        wmax = 2e-8  # S
+        scale_factor = 1.3
+    w_init = 1e-10  # S
     Ap *= wmax; Am *= wmax  # needed to reproduce Brian1 results
-    w_init = 0.1e-9  # S
           
     f_name = os.path.join(base_path, "files", f_in)
     spiking_neurons, spike_times = load_spike_trains(f_name)
     
     weightmx = learning(spiking_neurons, spike_times, taup, taum, Ap, Am, wmax, w_init)
-    #weightmx *= scale_factor  # quick and dirty additional scaling! (in an ideal world the STDP parameters should be changed to include this scaling...)
+    weightmx *= scale_factor  # quick and dirty additional scaling! (in an ideal world the STDP parameters should be changed to include this scaling...)
+    
     
     pklf_name = os.path.join(base_path, "files", f_out)
-    with open(pklf_name, "wb") as f:
-        pickle.dump(weightmx, f, protocol=pickle.HIGHEST_PROTOCOL)
+    save_wmx(weightmx, pklf_name)
 
-
-    plot_wmx(weightmx, "wmx_%s"%STDP_mode)
-    plot_wmx_avg(weightmx, 100, "wmx_avg_%s"%STDP_mode)
-    plot_w_distr(weightmx, "w_distr_%s"%STDP_mode)
-
-    selection = np.array([500, 1999, 4000, 6000, 7498])
-    dWee = save_selected_w(weightmx, selection)
-    plot_weights(dWee, "sel_weights_%s"%STDP_mode)
+    plot_wmx(weightmx, save_name=f_out[:-4])
+    plot_wmx_avg(weightmx, n_pops=100, save_name="%s_avg"%f_out[:-4])
+    plot_w_distr(weightmx, save_name="%s_distr"%f_out[:-4])
+    selection = np.array([500, 2000, 4000, 6000, 7500])
+    plot_weights(save_selected_w(weightmx, selection), save_name="%s_sel_weights"%f_out[:-4])    
     plt.show()
 
     
