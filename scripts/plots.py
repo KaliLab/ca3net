@@ -518,32 +518,62 @@ def plot_weights(incomming_weights, save_name):
     fig.savefig(fig_name)
 
 
-def plot_posterior(X_posterior, temporal_res, save_name):
+def plot_posterior(X_posterior, save_name):
     """
     Saves plot with the posterior distribution Pr(x|spikes) for every given time bin
     :param X_posterior: posterior matrix (see `bayesian_decoding.py`)
-    :param temporal_res: temporal resolution/binning (ms)
     :param save_name: name of saved img
     """
     
-    temporal_points = np.arange(0, len_sim, temporal_res)
+    X_posterior = X_posterior[:,::3]
+    X_posterior[np.where(X_posterior < 5e-3)] = np.nan
 
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(1, 1, 1)
-    # this is a bit hacky but imshow() is just a huge blue image (thanks to many 0s)
-    idx = np.where(X_posterior != 0.0)
-    i = ax.scatter(idx[1]*temporal_res, idx[0]*(np.pi/180.0), c=X_posterior[idx].flatten(), s=1, cmap=plt.get_cmap("jet"), alpha=0.75)
-    fig.colorbar(i)
-    ax.scatter(temporal_points, np.argmax(X_posterior, axis=0)*(np.pi/180.0), c="red", s=2, label="ML estimate")
+    cmap = plt.get_cmap("jet")
+    cmap.set_bad(color="white")
+    i = ax.imshow(X_posterior, cmap=cmap, origin="lower")
     ax.set_title("Posterior distribution Pr(x|spikes)")
-    ax.set_xlim([0, len_sim])
     ax.set_xlabel("Time (ms)")
-    ax.set_ylim([0, 2*np.pi])
-    ax.set_ylabel("x Place along the circle (rad)")
-    ax.legend()
-
+    ax.set_xticks([0, 133, 267, 400, 533, 667]); ax.set_xticklabels([0, 2000, 4000, 6000, 8000, 10000])
+    ax.set_ylabel("Location along the circle (degree)")
+    #fig.colorbar(i)
+    
     fig_name = os.path.join(fig_dir, "%s.png"%save_name)
-    fig.savefig(fig_name)  
+    fig.savefig(fig_name)
+    
+    
+def plot_trajectory(spike_times, spiking_neurons, temporal_points, ML_est, fit, save_name):
+    """
+    Saves plot with maximum likelihood estimated locations and fitted continuous trajectory (frac function)
+    :param temporal_points: temporal points used to estimate location
+    :param ML_est: 
+    :param fit: fitted function (same lenght as temporal_points)
+    :param save_name: name of saved img
+    """
+    
+    fig = plt.figure(figsize=(10, 8))
+    
+    ax = fig.add_subplot(2, 1, 1)
+    ax.scatter(spike_times, spiking_neurons, c="blue", marker=".", s=12)
+    ax.set_title("PC raster")
+    ax.set_xlabel("Time (ms)")
+    ax.set_xlim([0, len_sim])    
+    ax.set_ylim([0, nPCs])
+    ax.set_ylabel("Neuron ID")
+    
+    ax2 = fig.add_subplot(2, 1, 2)
+    ax2.scatter(temporal_points, ML_est, color="blue", marker=".", s=15)
+    ax2.plot(temporal_points, fit, color="red")
+    ax2.set_title("ML estimated locations and trajectory fit (frac function)")
+    ax2.set_xlabel("Normalized time")
+    ax2.set_xlim([0, 1])
+    ax2.set_ylabel("Normalized place")
+    ax2.set_ylim([0, 1])
+    
+    fig.tight_layout()
+    fig_name = os.path.join(base_path, "figures", "%s.png"%save_name)
+    fig.savefig(fig_name)
 
 
 def plot_summary_replay(multipliers, avg_replay_intervals, rates_PC, rates_BC):

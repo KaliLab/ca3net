@@ -307,7 +307,7 @@ if __name__ == "__main__":
     place_cell_ratio = 0.5
     f_in = "wmx_%s_%.1f.pkl"%(STDP_mode, place_cell_ratio)    
     detailed = True; TFR = False; analyse_LFP = False
-    que = False; save_spikes = True; verbose = True
+    que = False; save_spikes = False; verbose = True
     
     if not detailed:
         analyse_LFP = False
