@@ -23,10 +23,10 @@ connection_prob_PC = 0.1  # sparseness
 nPCs = 8000
 
 
-def load_spike_trains(f_name):
+def load_spike_trains(npzf_name):
     """Loads in spike trains and converts it to 2 np.arrays for Brian2's SpikeGeneratorGroup"""
 
-    npz_f = np.load(f_name)
+    npz_f = np.load(npzf_name)
     spike_trains = npz_f["spike_trains"]
 
     spiking_neurons = 0 * np.ones_like(spike_trains[0])
@@ -125,8 +125,8 @@ if __name__ == "__main__":
     w_init = 1e-10  # S
     Ap *= wmax; Am *= wmax  # needed to reproduce Brian1 results
           
-    f_name = os.path.join(base_path, "files", f_in)
-    spiking_neurons, spike_times = load_spike_trains(f_name)
+    npzf_name = os.path.join(base_path, "files", f_in)
+    spiking_neurons, spike_times = load_spike_trains(npzf_name)
     
     weightmx = learning(spiking_neurons, spike_times, taup, taum, Ap, Am, wmax, w_init)
     weightmx *= scale_factor  # quick and dirty additional scaling! (in an ideal world the STDP parameters should be changed to include this scaling...)

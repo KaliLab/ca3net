@@ -9,8 +9,8 @@ import numpy as np
 from scipy import signal, misc
 
 
-Erev_exc = 0.0
-Erev_inh = -70.0
+Erev_E = 0.0
+Erev_I = -70.0
 volume_cond = 1 / 3.54
 
 
@@ -26,7 +26,7 @@ def preprocess_monitors(SM, RM, calc_ISI=True):
     """
 
     spike_times = np.array(SM.t_) * 1000.  # *1000 ms conversion
-    spiking_neurons = np.array(SM.i_)     
+    spiking_neurons = np.array(SM.i_)
     tmp_spike_times = SM.spike_trains().items() 
     rate = np.array(RM.rate_).reshape(-1, 10).mean(axis=1)
 
@@ -183,9 +183,9 @@ def _estimate_LFP(StateM, subset):
     for i in subset:
         v = StateM[i].vm*1000 # *1000 mV conversion
         g_exc = StateM[i].g_ampa + StateM[i].g_ampaMF  # this is already in nS (see *z in the equations)
-        i_exc = g_exc * (v - Erev_exc * np.ones_like(v))  # pA
+        i_exc = g_exc * (v - Erev_E * np.ones_like(v))  # pA
         g_inh = StateM[i].g_gaba
-        i_inh = g_inh * (v - Erev_inh * np.ones_like(v))  # pA
+        i_inh = g_inh * (v - Erev_I * np.ones_like(v))  # pA
         LFP += -(i_exc + i_inh)  # (this is still in pA)
         
     LFP *= 1 / (4 * np.pi * volume_cond * 1e6)  # uV (*1e-6 um conversion)
