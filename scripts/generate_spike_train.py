@@ -16,6 +16,7 @@ base_path = os.path.sep.join(os.path.abspath(__file__).split(os.path.sep)[:-2])
 
 outfield_rate = 0.1  # avg. firing rate outside place field [Hz]
 infield_rate = 20.0  # avg. in-field firing rate [Hz]
+t_max = 405.0  # [s]
 
 
 def save_place_fields(place_cells, phi_starts, pklf_name):
@@ -58,10 +59,10 @@ def generate_spike_train(n_neurons, place_cell_ratio, ordered=True, seed=12345):
     spike_trains = []; i = 0
     for neuron_id in range(0, n_neurons):
         if neuron_id in place_cells:
-            spike_train = inhom_poisson(infield_rate, phi_starts[i], seed)
+            spike_train = inhom_poisson(infield_rate, t_max, phi_starts[i], seed)
             i += 1
         else:
-            spike_train = hom_poisson(outfield_rate, seed)
+            spike_train = hom_poisson(outfield_rate, t_max, seed)
         spike_trains.append(spike_train)
         seed += 1
         
@@ -81,7 +82,7 @@ if __name__ == "__main__":
     #spike_trains = generate_spike_train(n_neurons, place_cell_ratio, ordered=False) 
     spike_trains = refractoriness(spike_trains)  # clean spike train (based on refractory period)
    
-    f_name = os.path.join(base_path, "files", f_out)
-    np.savez(f_name, spike_trains=spike_trains)
+    npzf_name = os.path.join(base_path, "files", f_out)
+    np.savez(npzf_name, spike_trains=spike_trains)
 
 

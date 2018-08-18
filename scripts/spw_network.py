@@ -52,8 +52,8 @@ delay_BC_E = 0.9 * ms  # Geiger 1997 (data from DG)
 delay_BC_I = 0.6 * ms  # Bartos 2002
         
 # synaptic reversal potentials
-Erev_exc = 0.0 * mV
-Erev_inh = -70.0 * mV
+Erev_E = 0.0 * mV
+Erev_I = -70.0 * mV
 
 # mossy fiber input
 rate_MF = 18.5 * Hz
@@ -86,7 +86,7 @@ spike_th_BC = theta_BC + 10 * delta_T_BC
 
 
 eqs_PC = """
-dvm/dt = (-g_leak_PC*(vm-Vrest_PC) + g_leak_PC*delta_T_PC*exp((vm- theta_PC)/delta_T_PC) - w - ((g_ampa+g_ampaMF)*z*(vm-Erev_exc) + g_gaba*z*(vm-Erev_inh)))/Cm_PC : volt (unless refractory)
+dvm/dt = (-g_leak_PC*(vm-Vrest_PC) + g_leak_PC*delta_T_PC*exp((vm- theta_PC)/delta_T_PC) - w - ((g_ampa+g_ampaMF)*z*(vm-Erev_E) + g_gaba*z*(vm-Erev_I)))/Cm_PC : volt (unless refractory)
 dw/dt = (a_PC*(vm- Vrest_PC )-w)/tau_w_PC : amp
 dg_ampa/dt = (norm_PC_E * x_ampa - g_ampa) / rise_PC_E : 1
 dx_ampa/dt = -x_ampa / decay_PC_E : 1
@@ -97,7 +97,7 @@ dx_gaba/dt = -x_gaba/decay_PC_I : 1
 """
 
 eqs_BC = """
-dvm/dt = (-g_leak_BC*(vm-Vrest_BC) + g_leak_BC*delta_T_BC*exp((vm- theta_BC)/delta_T_BC) - (g_ampa*z*(vm-Erev_exc) + g_gaba*z*(vm-Erev_inh)))/Cm_BC : volt (unless refractory)
+dvm/dt = (-g_leak_BC*(vm-Vrest_BC) + g_leak_BC*delta_T_BC*exp((vm- theta_BC)/delta_T_BC) - (g_ampa*z*(vm-Erev_E) + g_gaba*z*(vm-Erev_I)))/Cm_BC : volt (unless refractory)
 dg_ampa/dt = (norm_BC_E * x_ampa - g_ampa) / rise_BC_E : 1
 dx_ampa/dt = -x_ampa/decay_BC_E : 1
 dg_gaba/dt = (norm_BC_I * x_gaba - g_gaba) / rise_BC_I : 1
@@ -118,14 +118,17 @@ def load_wmx(pklf_name):
     return wmx_PC_E
 
 
-def run_simulation(wmx_PC_E, STDP_mode, detailed=True, verbose=True):
+def run_simulation(wmx_PC_E, STDP_mode, detailed=True, LFP=False, que=False, save_spikes=False, verbose=True):
     """
     Sets up the network and runs simulation
     :param wmx_PC_E: np.array representing the recurrent excitatory synaptic weight matrix
     :param STDP_mode: symmetric or asymmetric weight matrix flag (used for synapse parameters)
     :param detailed: bool - useage of multi state monitor (for membrane pot and inh. and exc. inputs of some singe cells)
+    :param LFP: similar to `detailed` but more PCs are recorded
+    :param que: if True it adds an other Brian2 `SpikeGeneratorGroup` to stimulate a subpop in the beginning (qued replay)
+    :param save_spikes: flag to save PC spikes after the simulation (used by `bayesian_decoding.py` later)
     :param verbose: bool - report status of simulation
-    :return SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC: brian2 monitors (+ array of selected cells used by multi state monitor) 
+    :return SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC: Brian2 monitors (+ array of selected cells used by multi state monitor)
     """
 
     np.random.seed(12345)
@@ -141,51 +144,78 @@ def run_simulation(wmx_PC_E, STDP_mode, detailed=True, verbose=True):
         w_BC_E = 4.45
         w_BC_I = 7.5
 
-    PE = NeuronGroup(nPCs, model=eqs_PC, threshold="vm>spike_th_PC",
+    PCs = NeuronGroup(nPCs, model=eqs_PC, threshold="vm>spike_th_PC",
                      reset="vm=Vreset_PC; w+=b_PC", refractory=tref_PC, method="exponential_euler")
-    PE.vm = Vrest_PC; PE.g_ampa = 0.0; PE.g_ampaMF = 0.0; PE.g_gaba = 0.0
+    PCs.vm = Vrest_PC; PCs.g_ampa = 0.0; PCs.g_ampaMF = 0.0; PCs.g_gaba = 0.0
                      
-    PI = NeuronGroup(nBCs, model=eqs_BC, threshold="vm>spike_th_BC",
+    BCs = NeuronGroup(nBCs, model=eqs_BC, threshold="vm>spike_th_BC",
                      reset="vm=Vreset_BC", refractory=tref_BC, method="exponential_euler")    
-    PI.vm  = Vrest_BC; PI.g_ampa = 0.0; PI.g_gaba = 0.0
+    BCs.vm  = Vrest_BC; BCs.g_ampa = 0.0; BCs.g_gaba = 0.0
 
     MF = PoissonGroup(nPCs, rate_MF)
-    C_PC_MF = Synapses(MF, PE, on_pre="x_ampaMF+=w_PC_MF")
+    C_PC_MF = Synapses(MF, PCs, on_pre="x_ampaMF+=w_PC_MF")
     C_PC_MF.connect(j='i')
     
+    if que:
+        # generate short (200ms) Poisson spike train at 20Hz (with PoissonGroup one can't specify the duration)
+        from poisson_proc import hom_poisson
+        
+        spike_times = np.asarray(hom_poisson(20.0, t_max=0.2, seed=12345))
+        spiking_neurons = np.zeros_like(spike_times)
+        for neuron_id in range(1, 100):
+            spike_times_tmp = np.asarray(hom_poisson(20.0, t_max=0.2, seed=12345+neuron_id))
+            spike_times = np.concatenate((spike_times, spike_times_tmp), axis=0)
+            spiking_neurons_tmp = neuron_id * np.ones_like(spike_times_tmp)
+            spiking_neurons = np.concatenate((spiking_neurons, spiking_neurons_tmp), axis=0)           
+        que_input = SpikeGeneratorGroup(100, spiking_neurons, spike_times*second)
+    
+        # connects it to the middle of PC pop
+        C_PC_que = Synapses(que_input, PCs, on_pre="x_ampaMF+=w_PC_MF")
+        C_PC_que.connect(i=np.arange(0, 100, 1), j=np.arange(4950, 5050, 1))
+    
     # weight matrix used here
-    C_PC_E = Synapses(PE, PE, 'w_exc:1', on_pre='x_ampa+=w_exc')
+    C_PC_E = Synapses(PCs, PCs, 'w_exc:1', on_pre='x_ampa+=w_exc')
     nonzero_weights = np.nonzero(wmx_PC_E)    
     C_PC_E.connect(i=nonzero_weights[0], j=nonzero_weights[1])
     C_PC_E.w_exc = wmx_PC_E[nonzero_weights].flatten()
     C_PC_E.delay = delay_PC_E
     del wmx_PC_E
 
-    C_PC_I = Synapses(PE, PI, on_pre='x_ampa+=w_BC_E')
+    C_PC_I = Synapses(PCs, BCs, on_pre='x_ampa+=w_BC_E')
     C_PC_I.connect(p=connection_prob_PC)
     C_PC_I.delay = delay_BC_E
 
-    C_BC_E = Synapses(PI, PE, on_pre='x_gaba+=w_PC_I')
+    C_BC_E = Synapses(BCs, PCs, on_pre='x_gaba+=w_PC_I')
     C_BC_E.connect(p=connection_prob_BC)
     C_BC_E.delay = delay_PC_I
 
-    C_BC_I = Synapses(PI, PI, on_pre='x_gaba+=w_BC_I')
+    C_BC_I = Synapses(BCs, BCs, on_pre='x_gaba+=w_BC_I')
     C_BC_I.connect(p=connection_prob_BC)
     C_BC_I.delay = delay_BC_I
 
-    SM_PC = SpikeMonitor(PE)
-    SM_BC = SpikeMonitor(PI)
-    RM_PC = PopulationRateMonitor(PE)
-    RM_BC = PopulationRateMonitor(PI)
+    SM_PC = SpikeMonitor(PCs)
+    SM_BC = SpikeMonitor(BCs)
+    RM_PC = PopulationRateMonitor(PCs)
+    RM_BC = PopulationRateMonitor(BCs)
     if detailed:
-        selection = np.arange(0, nPCs, 20)  # subset of neurons for recoring variables (could be way less for detailed plots, it's many because of the LFP)
-        StateM_PC = StateMonitor(PE, variables=["vm", "w", "g_ampa", "g_ampaMF","g_gaba"], record=selection.tolist(), dt=0.1*ms)
-        StateM_BC = StateMonitor(PI, "vm", record=[nBCs/2], dt=0.1*ms)
+        selection = np.arange(0, nPCs, 100)  # subset of neurons for recoring variables 
+        if LFP:
+            selection = np.arange(0, nPCs, 20)  # record more neurons for better LFP estimate
+        StateM_PC = StateMonitor(PCs, variables=["vm", "w", "g_ampa", "g_ampaMF","g_gaba"], record=selection.tolist(), dt=0.1*ms)
+        StateM_BC = StateMonitor(BCs, "vm", record=[nBCs/2], dt=0.1*ms)
     
     if verbose:
         run(10000*ms, report="text")
     else:
         run(10000*ms)
+        
+    if save_spikes:
+        spike_times = np.array(SM_PC.t_) * 1000.  # *1000 ms conversion
+        spiking_neurons = np.array(SM_PC.i_)
+        
+        f_name = os.path.join(base_path, "files", "sim_spikes_%s.npz"%STDP_mode)
+        np.savez(f_name, spike_times=spike_times, spiking_neurons=spiking_neurons)
+        print "PC spikes saved"
     
     if detailed:
         return SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC
@@ -276,7 +306,8 @@ if __name__ == "__main__":
     
     place_cell_ratio = 0.5
     f_in = "wmx_%s_%.1f.pkl"%(STDP_mode, place_cell_ratio)    
-    detailed = True; TFR = False; analyse_LFP = True; verbose = True
+    detailed = True; TFR = False; analyse_LFP = False
+    que = False; save_spikes = True; verbose = True
     
     if not detailed:
         analyse_LFP = False
@@ -286,12 +317,13 @@ if __name__ == "__main__":
     wmx_PC_E = load_wmx(pklf_name) * 1e9  # *1e9 nS conversion
         
     if detailed:
-        SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC = run_simulation(wmx_PC_E, STDP_mode, detailed=True)
+        SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC = run_simulation(wmx_PC_E, STDP_mode, detailed=True,
+                                                                                     LFP=analyse_LFP, que=que, save_spikes=save_spikes, verbose=verbose)
         _ = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier=1,
                             detailed=True, selection=selection, StateM_PC=StateM_PC, StateM_BC=StateM_BC,
                             TFR=TFR, analyse_LFP=analyse_LFP, verbose=verbose)
     else:
-        SM_PC, SM_BC, RM_PC, RM_BC = run_simulation(wmx_PC_E, STDP_mode, detailed=False)
+        SM_PC, SM_BC, RM_PC, RM_BC = run_simulation(wmx_PC_E, STDP_mode, detailed=False, que=que, save_spikes=save_spikes, verbose=verbose)
         _ = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier=1, detailed=False, TFR=TFR, verbose=verbose)
 
     plt.show()      

@@ -28,12 +28,17 @@ if __name__ == "__main__":
     assert STDP_mode in ["sym", "asym"]
     
     place_cell_ratio = 0.5
-    detailed = True; TFR = False; analyse_LFP=False; verbose = False
+    detailed = True; TFR = False; analyse_LFP = False
+    que = False; save_spikes = False; verbose = False
     
-    #f_in = "wmx_%s_%.1f.pkl"%(STDP_mode, place_cell_ratio); multipliers = np.arange(0.7, 1.4, 0.1)
+    if not detailed:
+        analyse_LFP = False
+        print "Without `detailed` recording LFP can't be estimated..."
+    
+    f_in = "wmx_%s_%.1f.pkl"%(STDP_mode, place_cell_ratio); multipliers = np.arange(0.7, 1.4, 0.1)
     #f_in = "wmx_%s_%.1f_shuffled.pkl"%(STDP_mode, place_cell_ratio); multipliers = np.arange(0.7, 1.4, 0.1)
     #f_in = "wmx_%s_%.1f_binary.pkl"%(STDP_mode, place_cell_ratio); multipliers = np.arange(1.3, 2.0, 0.1) if STDP_mode == "sym" else np.arange(1.8, 2.5, 0.1)
-    f_in = "wmx_%s_%.1f_block_shuffled.pkl"%(STDP_mode, place_cell_ratio); multipliers = np.arange(1.8, 2.5, 0.1)
+    #f_in = "wmx_%s_%.1f_block_shuffled.pkl"%(STDP_mode, place_cell_ratio); multipliers = np.arange(0.7, 1.4, 0.1)
     #f_in = "wmx_%s_%.1f_shuffled_subpop_input.pkl"%(STDP_mode, place_cell_ratio); multipliers = np.arange(0.7, 1.4, 0.1)
     #f_in = "wmx_%s_%.1f_2envs.pkl"%(STDP_mode, place_cell_ratio); multipliers = np.arange(0.6, 1.3, 0.1)
     
@@ -49,12 +54,13 @@ if __name__ == "__main__":
         print "multiplier: %.2f"%multiplier
         
         if detailed:
-            SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC = run_simulation(wmx_PC_E, STDP_mode, detailed=True)
+            SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC = run_simulation(wmx_PC_E*multiplier, STDP_mode, detailed=True,
+                                                                                         LFP=analyse_LFP, que=que, save_spikes=save_spikes, verbose=verbose)
             results[i, :] = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier=multiplier,
                                             detailed=True, selection=selection, StateM_PC=StateM_PC, StateM_BC=StateM_BC,
                                             TFR=TFR, analyse_LFP=analyse_LFP, verbose=verbose)
         else:
-            SM_PC, SM_BC, RM_PC, RM_BC = run_simulation(wmx_PC_E, STDP_mode, detailed=False)
+            SM_PC, SM_BC, RM_PC, RM_BC = run_simulation(wmx_PC_E*multiplier, STDP_mode, detailed=False, que=que, save_spikes=save_spikes, verbose=verbose)
             results[i, :] = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier=multiplier, detailed=False, TFR=TFR, verbose=verbose)
         
         plt.close("all")

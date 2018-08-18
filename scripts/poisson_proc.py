@@ -12,7 +12,6 @@ theta = 7.0  # theta osc. freq. [Hz]
 v_mice = 32.43567842  # [cm/s]
 l_route = 300.0  # circumference [cm]
 l_place_field = 30.0  # [cm]
-t_max = 405.0  # [s]
 s = 2.0  # param of phase-locking (von Misses distribution)
 
 r = l_route / (2*np.pi)  # [cm]
@@ -34,16 +33,17 @@ def _generate_exp_rand_number(lambda_, seed):
     return -mu * np.log(np.random.rand(1))[0]
 
 
-def hom_poisson(lambda_, seed):
+def hom_poisson(lambda_, t_max, seed):
     """
     Generates Poisson process (interval times X_i = -ln(U_i)/lambda_, where lambda_ is the rate and U_i ~ Uniform(0,1))
     :param lambda_: rate of the Poisson process
+    :param t_max: length of the generate Poisson process
     :param seed: seed for random number generation
     :return: poisson_proc: list which represent a homogenos Poisson process
     #TODO: optimize this or change to `NeuroTools.stgen()`
     """
     
-    poisson_proc = [_generate_exp_rand_number(lambda_, seed)]; i = 0     
+    poisson_proc = [_generate_exp_rand_number(lambda_, seed)]; i = 0
     while poisson_proc[i] < t_max:
         isi = _generate_exp_rand_number(lambda_, seed+i+1)
         poisson_proc.append(poisson_proc[-1] + isi)
@@ -104,7 +104,7 @@ def calc_lambda(t, phi_start, phase0):
     return lambdaP
 
 
-def inhom_poisson(lambda_, phi_start, seed, phase0=0.0):
+def inhom_poisson(lambda_, t_max, phi_start, seed, phase0=0.0):
     """
     Generates a homogenous Poisson process and converts it to inhomogenous
     via keeping only a subset of spikes based on the rate of the place cell (see: `calc_lambda()`)
@@ -115,7 +115,7 @@ def inhom_poisson(lambda_, phi_start, seed, phase0=0.0):
     :return: inhom_poisson_proc: list which represent an inhomogenos Poisson process
     """
 
-    poisson_proc = hom_poisson(lambda_, seed)
+    poisson_proc = hom_poisson(lambda_, t_max, seed)
 
     inhom_poisson_proc = []
     for i, t in enumerate(poisson_proc):
