@@ -20,7 +20,7 @@ t_route = l_route / v_mice  # [s]
 w_mice = 2*np.pi / t_route  # angular velocity
 
 
-def _generate_exp_rand_number(lambda_, seed):
+def _generate_exp_rand_numbers(lambda_, seed):
     """
     MATLAB's random exponential number
     :param lambda_: rate (of the Poisson process)
@@ -30,7 +30,8 @@ def _generate_exp_rand_number(lambda_, seed):
     
     np.random.seed(seed)
     mu = 1.0 / lambda_
-    return -mu * np.log(np.random.rand(1))[0]
+    return -mu * np.log(np.random.rand(10000))  # hard coded for 10000 random numbers, which should be enough
+    # ... avg. number of spikes in the (Homogenous) Poisson Proc is 8000
 
 
 def hom_poisson(lambda_, t_max, seed):
@@ -43,11 +44,13 @@ def hom_poisson(lambda_, t_max, seed):
     #TODO: optimize this or change to `NeuroTools.stgen()`
     """
     
-    poisson_proc = [_generate_exp_rand_number(lambda_, seed)]; i = 0
+    rnd_isis = _generate_exp_rand_numbers(lambda_, seed)
+    
+    poisson_proc = [rnd_isis[0]]; i = 0
     while poisson_proc[i] < t_max:
-        isi = _generate_exp_rand_number(lambda_, seed+i+1)
-        poisson_proc.append(poisson_proc[-1] + isi)
         i += 1
+        isi = rnd_isis[i]
+        poisson_proc.append(poisson_proc[-1] + isi)        
     del poisson_proc[-1]  # delete the last element which is higher than t_max
     
     return poisson_proc
