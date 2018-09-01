@@ -2,17 +2,18 @@
 # -*- coding: utf8 -*-
 """
 Helper functions for generating hippocampal like spike trains (absolutely not the most efficient way)
+Setup: many repetitions on a circular track
 authors: András Ecker, Eszter Vértes, Szabolcs Káli last update: 02.2018
 """
 
 import numpy as np
 
 
-theta = 7.0  # theta osc. freq. [Hz]
+f_theta = 7.0  # theta osc. freq. [Hz]
 v_mice = 32.43567842  # [cm/s]
 l_route = 300.0  # circumference [cm]
 l_place_field = 30.0  # [cm]
-s = 2.0  # param of phase-locking (von Misses distribution)
+s = 7.0  # phase-locking (circular Gaussian)
 
 r = l_route / (2*np.pi)  # [cm]
 phi_PF_rad = l_place_field / r  # [rad]
@@ -20,112 +21,135 @@ t_route = l_route / v_mice  # [s]
 w_mice = 2*np.pi / t_route  # angular velocity
 
 
-def _generate_exp_rand_numbers(lambda_, seed):
+def _generate_exp_rand_numbers(lambda_, n_rnds, seed):
     """
     MATLAB's random exponential number
-    :param lambda_: rate (of the Poisson process)
+    :param lambda_: normalization (will be the rate of Poisson proc - see `hom_poisson()`)
+    :param n_rnds: number of random numbers to gerenerate
     :param seed: seed for random number generation
-    :return: random number (same as MATLAB's exprnd(mu))
+    :return: exponential random numbers
     """
     
-    np.random.seed(seed)
-    mu = 1.0 / lambda_
-    return -mu * np.log(np.random.rand(10000))  # hard coded for 10000 random numbers, which should be enough
-    # ... avg. number of spikes in the (Homogenous) Poisson Proc is 8000
+    np.random.seed(seed)  
+    return -1.0 / lambda_ * np.log(np.random.rand(n_rnds))
 
 
-def hom_poisson(lambda_, t_max, seed):
+def hom_poisson(lambda_, n_rnds, t_max, seed):
     """
     Generates Poisson process (interval times X_i = -ln(U_i)/lambda_, where lambda_ is the rate and U_i ~ Uniform(0,1))
     :param lambda_: rate of the Poisson process
+    :param n_rnds: see `_generate_exp_rand_numbers()`
     :param t_max: length of the generate Poisson process
-    :param seed: seed for random number generation
-    :return: poisson_proc: list which represent a homogenos Poisson process
-    #TODO: optimize this or change to `NeuroTools.stgen()`
+    :param seed: seed for random number generation (see `_generate_exp_rand_numbers()`)
+    :return: poisson_proc: np.array which represent a homogenos Poisson process
     """
     
-    rnd_isis = _generate_exp_rand_numbers(lambda_, seed)
+    rnd_isis = _generate_exp_rand_numbers(lambda_, n_rnds, seed)    
+    poisson_proc = np.cumsum(rnd_isis)
     
-    poisson_proc = [rnd_isis[0]]; i = 0
-    while poisson_proc[i] < t_max:
-        i += 1
-        isi = rnd_isis[i]
-        poisson_proc.append(poisson_proc[-1] + isi)        
-    del poisson_proc[-1]  # delete the last element which is higher than t_max
-    
-    return poisson_proc
+    return poisson_proc[np.where(poisson_proc <= t_max)]
+    #TODO: this doesn't make sure that the Poisson proc is t_max long... but generates longer (based on n_rnds) and deletes the end
 
 
-def _get_lambda(x, y, mid_PF, m):
+def get_tuning_curve(spatial_points, phi_start):
     """
-    Calculates lambda parameter of distr. (cos(): PF prefference * exp(): vonMisses distr AKA. circular normal distr. = tuning curve on circle)
-    :param y: phase precision
-    :param mid_PF: mean of the (current) place field
-    :param m: prefered phase: f(current position within the place field)
-    :return: lambda: calculated lambda parameter of the Poisson process
+    Calculates (not estimates) tuning curve (on a circle -> circular Gaussian function)
+    :param spatial_points: spatial points along the circle (in rad)
+    :param phi_start: starting point of the place field (in rad)
+    :return: tau: tuning curve of the place cell
     """
-    
-    lambda1 = np.cos((2*np.pi) / (2 * phi_PF_rad) * (x - mid_PF))
-    lambda2 = np.exp(s * np.cos(y - m)) / np.exp(s)
-    
-    return lambda1 * lambda2
 
-
-def calc_lambda(t, phi_start, phase0):
-    """
-    Calculates the lambda parameter of the Poisson process, that represent the firing rate of CA3 pyr. cells
-    (takes preferred place and phase precession into account)
-    #TODO: vectorize this (instead of calling it for every t in the hom. Poisson - it could be called for the whole hom. Poisson once, but beware of PFs!)
-    :param t: time (used for calculating the current position of the mice)
-    :param phi_start: starting point of the place field
-    :param phase0: initial phase (used for modeling phase precession)
-    :return: lambda: calculated lambda parameter of the Poisson process (see: `_get_lambda()`)
-    """
+    mid_PF = np.mod(phi_start + phi_PF_rad/2.0, 2*np.pi)
     
+    # circular Gaussian
+    tau = 1.0/np.exp(s) * np.exp(s*np.cos(spatial_points - mid_PF))
+    
+    # set to 0 outside of PF
     phi_end = np.mod(phi_start + phi_PF_rad, 2*np.pi)
-    
-    x = np.mod(w_mice * t, 2*np.pi)  # position of the mice [rad]
-
-    # first if-else is needed because of the circular tract...
     if phi_start < phi_end:
-        if phi_start <= x and x < phi_end:  # if the mice is in the place field
-            mid_PF = phi_start + phi_PF_rad/2.0
-            y = phase0 + 2*np.pi * theta * t  # phase prec...
-            m = - (x - phi_start) * 2*np.pi / phi_PF_rad
-            lambdaP = _get_lambda(x, y, mid_PF, m)
-        else:
-            lambdaP = 0
+        tau[np.where(spatial_points < phi_start)] = 0.0
+        tau[np.where(spatial_points > phi_end)] = 0.0
     else:
-        if phi_start <= x or x < phi_end:  # if the mice is in the place field
-            mid_PF = np.mod(phi_start + phi_PF_rad/2.0, 2*np.pi)
-            y = phase0 + 2*np.pi * theta * t  # phase prec...
-            m = - (x - phi_start) * 2*np.pi / phi_PF_rad
-            lambdaP = _get_lambda(x, y, mid_PF, m)
-        else:
-            lambdaP = 0
+        tau[np.where((spatial_points < phi_start) & (spatial_points > phi_end))] = 0.0
+        
+    return tau
+    
 
-    return lambdaP
+# this one is used only for validation and plotting
+def calc_lambda_t(t, phi_start, phase0):
+    """
+    Calculates firing rate(t, x) of place cells
+    :param t: time vector
+    :param phi_start: starting point of the place field (in rad)
+    :param phase0: initial phase (used for modeling phase precession)
+    :return: lambda_t: firing rate of the place cell
+    """
+    
+    x = np.mod(w_mice * t, 2*np.pi)  # positions of the mice [rad]
+    
+    # chunk out single circles from pos x and get tuning curve (because of the zeroing part it can't be called on the whole x)
+    tmp = np.abs(np.diff(x))
+    idx = [0] + np.where(tmp > np.pi)[0].tolist() + [len(x)]
+    spatial_points = x[idx[0]:idx[1]]
+    tau_x = get_tuning_curve(spatial_points, phi_start)
+    for id_from, id_to in zip(idx[1:-1], idx[2:]):
+        spatial_points = x[id_from:id_to]
+        tau_x = np.concatenate((tau_x, get_tuning_curve(spatial_points, phi_start)), axis=0)
+    
+    # theta modulation of firing rate (+ phase precession)
+    phase = phase0 + 2*np.pi * f_theta * t
+    phase_shift = -2*np.pi / phi_PF_rad * (x - phi_start)
+    theta_mod = np.cos(phase - phase_shift)
+    
+    lambda_t = tau_x * theta_mod
+    lambda_t[np.where(lambda_t < 0.0)] = 0.0
+    
+    return lambda_t
+    
+    
+def evaluate_lambda_t(t, phi_start, phase0):
+    """
+    Evaluates firing rate(t, x) at given time points (similar to `calc_lambda_t()` but way faster)
+    :param t: sample time points
+    :param phi_start: starting point of the place field (in rad)
+    :param phase0: initial phase (used for modeling phase precession)
+    :return: lambda_t sampled at the given time points
+    """
+    
+    x = np.mod(w_mice * t, 2*np.pi)  # positions of the mice [rad]
 
+    tau_x = get_tuning_curve(x, phi_start)
+    
+    # theta modulation of firing rate (+ phase precession)
+    phase = phase0 + 2*np.pi * f_theta * t
+    phase_shift = -2*np.pi / phi_PF_rad * (x - phi_start)
+    theta_mod = np.cos(phase - phase_shift)
+    
+    lambda_t = tau_x * theta_mod
+    lambda_t[np.where(lambda_t < 0.0)] = 0.0
+    
+    return lambda_t
+    
 
 def inhom_poisson(lambda_, t_max, phi_start, seed, phase0=0.0):
     """
     Generates a homogenous Poisson process and converts it to inhomogenous
-    via keeping only a subset of spikes based on the rate of the place cell (see: `calc_lambda()`)
-    :param lambda_: rate of the Poisson process (see `calc_lambda()`)
-    :param phi_start: starting point of the place field (see `calc_lambda()`)
+    via keeping only a subset of spikes based on the (time and space dependent) rate of the place cell (see `evaluate_lambda_t()`)
+    :param lambda_: rate of the hom. Poisson process (see `hom_poisson()`)
+    :param t_max: length of the generate Poisson process
+    :param phi_start: starting point of the place field (see `evaluate_lambda_t()`)
     :param seed: seed for random number generation
-    :param phase0: initial phase (see `calc_lambda()`)
-    :return: inhom_poisson_proc: list which represent an inhomogenos Poisson process
+    :param phase0: initial phase (see `evaluate_lambda_t()`)
+    :return: inhom_poisson_proc: inhomogenos Poisson process representing the spike train of a place cell
     """
 
-    poisson_proc = hom_poisson(lambda_, t_max, seed)
-
-    inhom_poisson_proc = []
-    for i, t in enumerate(poisson_proc):
-        np.random.seed(seed+i+1)
-        if calc_lambda(t, phi_start, phase0) >= np.random.rand(1):
-            inhom_poisson_proc.append(t)
-
+    poisson_proc = hom_poisson(lambda_, 10000, t_max, seed)  # hard coded 10000 works with 20Hz rate and 405sec spike train
+    
+    # keep only a subset of spikes
+    lambda_t = evaluate_lambda_t(poisson_proc, phi_start, phase0)
+    np.random.seed(seed)
+    inhom_poisson_proc = poisson_proc[np.where(lambda_t >= np.random.rand(poisson_proc.shape[0]))]
+    
     return inhom_poisson_proc
 
 
@@ -137,13 +161,13 @@ def refractoriness(spike_trains, ref_per=5e-3):
     :return spike_trains: same structure, but with some spikes deleted
     """
     
-    spike_trains_updated = []; count = 0    
+    spike_trains_updated = []; count = 0
     for single_spike_train in spike_trains:
         tmp = np.diff(single_spike_train)  # calculate ISIs
         idx = np.where(tmp < ref_per)[0] + 1
         if idx.size:
             count += idx.size
-            spikes_updated = np.delete(single_spike_train, idx).tolist()  # delete spikes which are too close
+            single_spike_train_updated = np.delete(single_spike_train, idx).tolist()  # delete spikes which are too close
         else:
             single_spike_train_updated = single_spike_train
         spike_trains_updated.append(single_spike_train_updated)
