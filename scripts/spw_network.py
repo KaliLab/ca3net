@@ -56,7 +56,7 @@ Erev_E = 0.0 * mV
 Erev_I = -70.0 * mV
 
 # mossy fiber input
-rate_MF = 18.5 * Hz
+rate_MF = 16.5 * Hz
 
 z = 1 * nS
 # parameters for PCs (optimized by Bence)
@@ -135,14 +135,15 @@ def run_simulation(wmx_PC_E, STDP_mode, detailed=True, LFP=False, que=False, sav
     pyrandom.seed(12345)
     
     # synaptic weights
-    w_PC_MF = 38
-    w_PC_I = 0.25
-    if STDP_mode == "asym":        
-        w_BC_E = 4.5
-        w_BC_I = 6.75
+    w_BC_E = 4.5
+    if STDP_mode == "asym":      
+        w_PC_I = 0.22       
+        w_BC_I = 7.15
+        w_PC_MF = 44.0
     elif STDP_mode == "sym":
-        w_BC_E = 4.45
-        w_BC_I = 7.5
+        w_PC_I = 0.23
+        w_BC_I = 6.4
+        w_PC_MF = 37.0
 
     PCs = NeuronGroup(nPCs, model=eqs_PC, threshold="vm>spike_th_PC",
                      reset="vm=Vreset_PC; w+=b_PC", refractory=tref_PC, method="exponential_euler")
@@ -305,7 +306,7 @@ if __name__ == "__main__":
     assert STDP_mode in ["sym", "asym"]
     
     place_cell_ratio = 0.5
-    f_in = "wmx_%s_%.1f.pkl"%(STDP_mode, place_cell_ratio)    
+    f_in = "wmx_%s_%.1f.pkl"%(STDP_mode, place_cell_ratio)
     detailed = True; TFR = False; analyse_LFP = False
     que = False; save_spikes = False; verbose = True
     

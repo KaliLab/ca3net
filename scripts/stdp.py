@@ -116,12 +116,12 @@ if __name__ == "__main__":
         Ap = 0.01
         Am = -Ap
         wmax = 4e-8  # S
-        scale_factor = 3.55
+        scale_factor = 1.6
     elif STDP_mode == "sym":
         taup = taum = 62.5 * ms
-        Ap = Am = 5e-3
+        Ap = Am = 4e-3
         wmax = 2e-8  # S
-        scale_factor = 1.3
+        scale_factor = 0.8
     w_init = 1e-10  # S
     Ap *= wmax; Am *= wmax  # needed to reproduce Brian1 results
           
