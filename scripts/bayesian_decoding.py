@@ -1,39 +1,29 @@
 #!/usr/bin/python
 # -*- coding: utf8 -*-
 """
-Infers position from spike trains (maximum likelihood)
-based on: Davison et al. 2009 (the difference is that the tau_i(x) tuning curves are known here, since we generated them... see: poisson_proc.py)
-author: András Ecker last update: 04.2018
+Estimates position from spike trains and fits trajectory of the animal (used for sequence replay detection)
+based on: Davison et al. 2009 (the difference is that the tau_i(x) tuning curves are known here, since we generated them... see: `poisson_proc.py`)
+author: András Ecker last update: 09.2018
 """
 
 import os
-import sys
 import pickle
 import numpy as np
-from scipy.misc import factorial
-from scipy.optimize import curve_fit
+from scipy.special import factorial
+import multiprocessing as mp
 from tqdm import tqdm  # progress bar
-import matplotlib.pyplot as plt
-from plots import *
+from poisson_proc import get_tuning_curve
 
 
-base_path = os.path.sep.join(os.path.abspath('__file__').split(os.path.sep)[:-2])
+base_path = os.path.sep.join(os.path.abspath("__file__").split(os.path.sep)[:-2])
 nPCs = 8000
 
 # temporal and spatial grid
 sim_length = 10000.0  # [ms]
-temporal_res = 5.0  # [ms]
-spatial_res = 2*np.pi / 360.0  # [rad] ( == 1 degree)
+temporal_res = 10.0  # [ms]
+spatial_res = 2*np.pi / 180.0  # [rad] ( == 2 degree)
 temporal_points = np.arange(0, sim_length, temporal_res)
 spatial_points = np.linspace(0, 2*np.pi, int(2*np.pi/spatial_res))
-
-# constants copied from poisson_proc.py
-l_route = 300.0  # circumference [cm]
-l_place_field = 30.0  # length of the place field [cm]
-r = l_route / (2*np.pi)  # radius [cm]
-phi_PF_rad = l_place_field / r  # (angle of) place field [rad]
-outfield_rate = 0.1  # avg. firing rate outside place field [Hz]
-infield_rate = 20.0  # avg. in-field firing rate [Hz]
     
     
 def load_spikes(npzf_name):
@@ -51,7 +41,7 @@ def extract_binspikecount(spike_times, spiking_neurons):
     Builds container of spike counts in a given interval (bin) - in order to save time in log(likelihood) calculation
     :param spike_times: np.array of ordered spike times (saved and loaded in ms)
     :param spiking_neurons: np.array (same shape as spike_times) with corresponding neuron IDs
-    :return: list (1 entry for every 5ms time bin) of dictionaries {i: n_i}
+    :return: list (1 entry for every time bin) of dictionaries {i: n_i}
     """
     
     bin_spike_counts = []
@@ -65,8 +55,12 @@ def extract_binspikecount(spike_times, spiking_neurons):
     return bin_spike_counts
 
     
-def load_PF_starts(pklf_name):
-    """Loads in saved place field starting points [rad]"""
+def _load_PF_starts(pklf_name):
+    """
+    Loads in saved place field starting points [rad]
+    :param pklf_name: name of saved file
+    :return: place_fields: dict neuronID: place field start (saved in `generate_spike_trains.py`)
+    """
     
     with open(pklf_name, "rb") as f:
         place_fields = pickle.load(f)
@@ -74,28 +68,22 @@ def load_PF_starts(pklf_name):
     return place_fields
     
     
-def get_tuning_curves(place_fields):
+def load_tuning_curves(pklf_name):
     """
-    Calculates (not estimates) tau_i(x) tuning curves
-    :param place_fields: dict of place cell IDs and corresponding place field starting points (saved in `generate_spike_trains.py`)
-    :return: tuning_curves: neuronID: tuning curve
+    Loads in tau_i(x) tuning curves (used for generating 'teaching' spike train, see `poisson_proc.py`)
+    :param pklf_name: see `_load_PF_starts`
+    :return: tuning_curves: dict neuronID: tuning curve
     """
+    
+    place_fields = _load_PF_starts(pklf_name)
     
     tuning_curves = {}
     for neuron_id in range(nPCs):
         if neuron_id in place_fields:
-            phi_start = place_fields[neuron_id]
-            mid_PF = np.mod(phi_start + phi_PF_rad/2.0, 2*np.pi)
-            phi_end = np.mod(phi_start + phi_PF_rad, 2*np.pi)
-            # first generate full cos() and then zero out points outside of the place field
-            tau_i = np.cos((2*np.pi) / (2 * phi_PF_rad) * (spatial_points - mid_PF)) * infield_rate
-            if phi_start < phi_end:            
-                tau_i[np.where(spatial_points < phi_start)] = 0.0
-                tau_i[np.where(spatial_points > phi_end)] = 0.0
-            else:
-                tau_i[np.where((spatial_points < phi_start) & (spatial_points > phi_end))] = 0.0            
+            phi_start = place_fields[neuron_id]            
+            tau_i = get_tuning_curve(spatial_points, phi_start)     
         else:
-            tau_i = np.zeros_like(spatial_points)  #outfield_rate * np.ones_like(spatial_points)  # don't take these into account...
+            tau_i = np.zeros_like(spatial_points)  # don't take these into account...
         tuning_curves[neuron_id] = tau_i
 
     return tuning_curves
@@ -118,46 +106,39 @@ def _build_tau_dict(tuning_curves):
     return x_tau
 
 
-def calc_log_likelihoods(bin_spike_counts, tuning_curves, pklf_name):
+def calc_log_likelihoods(bin_spike_counts, tuning_curves, verbose=True):
     """
     Calculates log(likelihood) based on Davison et al. 2009
     log(likelihood): log(Pr(spikes|x)) = \sum_{i=1}^N n_ilog(\frac{\Delta t \tau_i(x)}{n_i!}) - \Delta t \sum_{i=1}^N \tau_i(x)
-    #TODO: investigate into parallization of this...
-    :param bin_spike_counts: list (1 entry for every 5ms time bin) of dictionaries {i: n_i} (see `extract_binspikecount()`)
-    :param tuning_curves: dictionary of tuning curves {neuronID: tuning curve} (see `_build_tau_dict()`)
-    :param pklf_name: name of the loaded/saved file
-    return: log_likelihoods: list (1 entry for every 5ms time bin) of dictionaries x: log_likelihood
+    :param bin_spike_counts: list (1 entry for every time bin) of dictionaries {i: n_i} (see `extract_binspikecount()`)
+    :param tuning_curves: dictionary of tuning curves {neuronID: tuning curve} (see `load_tuning_curves()`)
+    :param verbose: bool for progress bar
+    return: log_likelihoods: list (1 entry for every time bin) of dictionaries x: log_likelihood
     """
-    
-    if os.path.isfile(pklf_name):  # try to load in previously saved file
-        with open(pklf_name, "rb") as f:
-            log_likelihoods = pickle.load(f)
-        print "Log likelihoods loaded from previously saved file!"
-    else:
-        x_tau = _build_tau_dict(tuning_curves)
-    
-        delta_t = temporal_res * 1e-3  # convert back to second
         
-        log_likelihoods = []
-        print "Calculating log likelihoods..."
-        for it, n_spikes in enumerate(tqdm(bin_spike_counts)):  # iterate over time bins
-            log_likelihoods_tmp = {}
-            for x, neuronIDs_taus in x_tau.iteritems():  # iterate over all spatial points
-            
-                log_likelihood = 0.0
-                for i, neuronID in enumerate(neuronIDs_taus["neuronIDs"]):  # iterate over neurons whose tau isn't 0 in that point
-                
-                    n_i = n_spikes[neuronID]
+    delta_t = temporal_res * 1e-3  # convert back to second
+    x_tau = _build_tau_dict(tuning_curves)
+    
+    if verbose:
+        pbar = tqdm(total=len(bin_spike_counts))
+    
+    log_likelihoods = []
+    for n_spikes in bin_spike_counts:  # iterate over all temporal points
+    
+        log_likelihoods_tmp = {}
+        for x, neuronIDs_taus in x_tau.iteritems():  # iterate over all spatial points
+        
+            log_likelihood = 0.0
+            for i, neuronID in enumerate(neuronIDs_taus["neuronIDs"]):  # iterate over neurons whose tau isn't 0 in that point
+                n_i = n_spikes[neuronID]
+                if n_i != 0.0:  # (tau_i won't be zero! - see above)
                     tau_i = neuronIDs_taus["taus"][i]
-                    if n_i != 0.0:  # (tau_i won't be zero! - see above)
-                        log_likelihood += n_i * np.log((delta_t * tau_i) / factorial(n_i).item())
-                        log_likelihood -= delta_t * tau_i
-                        
-                log_likelihoods_tmp[x] = log_likelihood
-            log_likelihoods.append(log_likelihoods_tmp)
-                    
-        with open(pklf_name, "wb") as f:
-            pickle.dump(log_likelihoods, f, protocol=pickle.HIGHEST_PROTOCOL)
+                    log_likelihood += n_i * np.log((delta_t * tau_i) / factorial(n_i).item()) - delta_t * tau_i       
+                            
+            log_likelihoods_tmp[x] = log_likelihood
+        log_likelihoods.append(log_likelihoods_tmp)
+        if verbose:
+            pbar.update()
     
     return log_likelihoods
 
@@ -165,7 +146,7 @@ def calc_log_likelihoods(bin_spike_counts, tuning_curves, pklf_name):
 def get_posterior(log_likelihoods):
     """
     Calculates posterior distribution Pr(x|spikes) for every time bin (assuming uniform prior)
-    #TODO: update prior insted of leaving it uniform?
+    #TODO: maybe update prior insted of leaving it uniform?
     :param log_likelihoods: list (over the temporal points) of dictionaries with log likelihoods of the spatial points (see `calc_log_likelihoods()`)
     """
     
@@ -184,107 +165,115 @@ def get_posterior(log_likelihoods):
     return X_posterior
 
 
-def _frac_func(x, a, b):
+def _line(x, a, b):
     """
-    Dummy frac function to pass to curve_fit
-    :param x: temporal points
-    :param a, b: slope and offset of the line(s)
-    """
-    
-    return (a*x+b) - np.floor(a*x+b)
-    
-    
-def _neg_frac_func(x, a, b):
-    """
-    Dummy negative frac function to pass to curve_fit
-    :param x: temporal points
-    :param a, b: slope and offset of the line(s)
-    """
-    
-    return (-a*x+b) - np.floor(-a*x+b)
-    
-
-def fit_trajectory_brute_force(ML_est, STDP_mode, grid_res=200):
-    """
-    Tries to fit a continuous trajectory to the estimated places with iterating through a parameter grid (brute force solution)
-    :param ML_est: maximum likelihood estimate of the location
-    :param STDP_mode: symmetric or asymmetric weight matrix flag (to handle reverse replay)
-    :param grid_res:
-    :param best_fit: parameters leading to the lowest sum of squares
+    Dummy function used for line fitting
+    :param x: independent variable
+    :param a, b: slope and intercept
     """
 
-    # normalize to [0, 1]
-    ML_est_tmp = ML_est / 360.
-    temporal_points_tmp = temporal_points / sim_length
+    return a*x + b
+
+
+def _evaluate_fit(X_posterior, y, t):
+    """
+    Calculates the goodness of fit based on Davison et al. 2009 (line fitting in a probability matrix)
+    R(v, rho) = \frac{1}{n} \sum_{k=1}^n-1 Pr(|pos - (rho + v*k*\Delta t)| < d)
+    :param X_posterior: posterior matrix (see `get_posterior()`)
+    :param y: candidate fitted line
+    :param t: time bins (same length as indexed out posterior matrix)
+    :return: R: goodness of fit (in [0, 1])
+    """
+
+    R_tmp = np.zeros((11, X_posterior.shape[1]))    
+    for i, k in enumerate(range(-5, 6)):  # 11 idx corresponding to 20 degrees in total
+        idx = np.mod(np.round(y)-k, 180).astype(int)
+        R_tmp[i,:] = X_posterior[idx,t]        
+    R = np.mean(np.sum(R_tmp, axis=0))
     
-    slopes = np.linspace(10.0, 30.0, grid_res)
-    offsets = np.linspace(0.0, 1.0, grid_res)
+    return R
+
+
+def fit_trajectory(X_posterior, grid_res=200):
+    """
+    Brute force trajectory fit in the posterior matrix (based on Davison et al. 2009, see: `_evaluate_fit()`)
+    :param X_posterior: posterior matrix (see `get_posterior()`)
+    :param grid_res: number of points to try along one dimension
+    :return: highest_R: best goodness of fit (`_evaluate_fit()`)
+             best_fit: slope and offset parameter corresponding to the highest R
+    """
     
-    best_fit = [slopes[0], offsets[0]]; lowest_SS = np.inf
-    print "Brute force fit..."
-    for a in tqdm(slopes):
+    slopes = np.linspace(-10., 10.0, grid_res)
+    offsets = np.linspace(0.0, 180.0, grid_res)
+    t = np.arange(0, X_posterior.shape[1])
+    
+    best_fit = [slopes[0], offsets[0]]; highest_R = 0.0
+    for a in slopes:
         for b in offsets:
-            y = _frac_func(temporal_points_tmp, a, b)
-            SS = np.sum((ML_est_tmp - y)**2)
-            if SS < lowest_SS:
+            y = _line(t, a, b)
+            R = _evaluate_fit(X_posterior, y, t)
+            if R > highest_R:
+                highest_R = R
                 best_fit = [a, b]
-                lowest_SS = SS
-            if STDP_mode == "sym":
-                y = _neg_frac_func(temporal_points_tmp, a, b)
-                SS = np.sum((ML_est_tmp - y)**2)
-                if SS < lowest_SS:
-                    best_fit = [a, b]
-                    lowest_SS = SS
+    return highest_R, best_fit
 
-    return best_fit
-    
-    
-    
-def fit_trajectory(ML_est, p0, STDP_mode):
+
+def _shuffle_tuning_curves(tuning_curves, seed):
     """
-    Fits a continuous trajectory to the estimated places
-    :param ML_est: maximum likelihood estimate of the location
-    :param STDP_mode: symmetric or asymmetric weight matrix flag (to handle reverse replay)
-    :param p0: initial values for scipy's curve_fit (see `fit_trajectory_brute_force()`)
-    :return: y: best trajectory fit
+    Shuffles neuron IDs and corresponding tuning curves (used for significance test)
+    :param tuning_curves: {neuronID: tuning curve}
+    :param seed: random seed for shuffling
     """
 
-    # normalize to [0, 1]
-    ML_est_tmp = ML_est / 360.
-    temporal_points_tmp = temporal_points / sim_length
+    keys = tuning_curves.keys()
+    vals = tuning_curves.values()
     
-    if STDP_mode == "asym":
-            
-        popt, pcov = curve_fit(_frac_func, temporal_points_tmp, ML_est_tmp,
-                               method="trf", p0=p0, bounds=[(10, 0), (30, 1)])
-        y = _frac_func(temporal_points_tmp, *popt)
-        SS = np.sum((ML_est_tmp - y)**2)
-        
-        print "Best fit: a:%.3f, b:%.3f, SS:%.3f"%(popt[0], popt[1], SS)
-        
-        return y
+    np.random.seed(seed)
+    np.random.shuffle(keys)
     
-    elif STDP_mode == "sym":
-        popt, pcov = curve_fit(_frac_func, temporal_points_tmp, ML_est_tmp,
-                               method="trf", p0=p0, bounds=[(10, 0), (30, 1)])
-        y = _frac_func(temporal_points_tmp, *popt)
-        SS = np.sum((ML_est_tmp - y)**2)
+    return {key:vals[i] for i, key in enumerate(keys)}
+
+
+def _test_significance_subprocess(inputs):
+    """
+    Subprocess used by multiprocessing pool for significance test: log(likelihood) calculation and line fit
+    :param inputs: see `calc_log_likelihoods()`
+    :return: R: see `fit_trajectory()`
+    """
+
+    log_likelihoods = calc_log_likelihoods(*inputs)
+    X_posterior = get_posterior(log_likelihoods)
+    R, _ = fit_trajectory(X_posterior)
     
-        popt_neg, pcov_neg = curve_fit(_neg_frac_func, temporal_points_tmp, ML_est_tmp,
-                           method="trf", p0=p0, bounds=[(10, 0), (30, 1)])
-        y_neg = _neg_frac_func(temporal_points_tmp, *popt_neg)
-        SS_neg = np.sum((ML_est_tmp - y_neg)**2)
-        
-        if SS < SS_neg:
-            print "Best fit (positive slope): a:%.3f, b:%.3f, SS:%.3f"%(popt[0], popt[1], SS)
-            return y
-        else:
-            print "Best fit (negative slope): a:%.3f, b:%.3f, SS:%.3f"%(popt_neg[0], popt_neg[1], SS_neg)
-            return y_neg    
+    return R
+
+
+def test_significance(bin_spike_counts, tuning_curves, R, N):
+    """
+    Test significance of fitted trajectory (and detected sequence replay) by shuffling the data and re-fitting many times
+    :param bin_spike_counts, tuning_curves: see `calc_log_likelihoods()`
+    :param R: reference goodness of fit (from unshuffled data)
+    :param N: number of shuffled versions tested
+    :return: Rs: list of goodness of fits from the shuffled events
+    """
+    
+    shuffled_tuning_curves = [_shuffle_tuning_curves(tuning_curves, seed=12345+i) for i in range(N)]
+    
+    pool = mp.Pool(processes=mp.cpu_count()-1)
+    Rs = pool.map(_test_significance_subprocess,
+                  zip([bin_spike_counts for _ in range(N)], shuffled_tuning_curves, [False for _ in range(N)]))
+    pool.terminate()
+    
+    significance = 1 if R > np.percentile(Rs, 95) else np.nan
+    
+    return significance, sorted(Rs)
 
 
 if __name__ == "__main__":
 
+    # these functions are mostly used by `detect_oscillations.py` for replay detection, but can be tested by running this main
+
+    import sys
     try:
         STDP_mode = sys.argv[1]       
     except:
@@ -292,35 +281,23 @@ if __name__ == "__main__":
     assert STDP_mode in ["sym", "asym"]
     
     place_cell_ratio = 0.5
+    verbose = True
     f_in_spikes = "sim_spikes_%s.npz"%STDP_mode
     f_in_PFs = "PFstarts_%s.pkl"%place_cell_ratio
-    f_save_loglikelihoods = "log_likelihoods_%s_%s.pkl"%(STDP_mode, place_cell_ratio)
     
     npzf_name = os.path.join(base_path, "files", f_in_spikes)
-    spike_times, spiking_neurons = load_spikes(npzf_name)
-    
+    spike_times, spiking_neurons = load_spikes(npzf_name)   
     bin_spike_counts = extract_binspikecount(spike_times, spiking_neurons)
     
     pklf_name = os.path.join(base_path, "files", f_in_PFs)
-    phi_starts = load_PF_starts(pklf_name)
+    tuning_curves = load_tuning_curves(pklf_name)
+
+    log_likelihoods = calc_log_likelihoods(bin_spike_counts, tuning_curves, verbose=verbose)
+    X_posterior = get_posterior(log_likelihoods)
+    R, _ = fit_trajectory(X_posterior)
     
-    tuning_curves = get_tuning_curves(phi_starts)
-    
-    print "Preprocessing done!"
-    
-    pklf_name = os.path.join(base_path, "files", f_save_loglikelihoods)
-    log_likelihoods = calc_log_likelihoods(bin_spike_counts, tuning_curves, pklf_name)
-    
-    X_posterior = get_posterior(log_likelihoods)    
-    ML_est = np.argmax(X_posterior, axis=0)  # maximum-likelihood estimate of position
-    
-    p0 = fit_trajectory_brute_force(ML_est, STDP_mode)
-    best_fit = fit_trajectory(ML_est, p0, STDP_mode)
-    
-    plot_posterior(X_posterior, "posterior_%s"%STDP_mode)
-    plot_trajectory(spike_times, spiking_neurons,
-                    temporal_points/sim_length, ML_est/360., best_fit, os.path.join(base_path, "figures", "fitted_trajectory_%s"%STDP_mode))    
-    plt.show()
+    significance, _ = test_significance(bin_spike_counts, tuning_curves, R, 10)
+
     
 
 
