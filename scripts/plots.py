@@ -9,57 +9,39 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+from detect_oscillations import _avg_rate
 
 
 sns.set(style="ticks", context="notebook")
-
 base_path = os.path.sep.join(os.path.abspath(__file__).split(os.path.sep)[:-2])
 fig_dir = os.path.join(base_path, "figures")
-
-# spike thresholds
-spike_th_PC = 19.85800072  # (optimized by Bence)
-spike_th_BC = -17.48690645  # (optimized by Bence)
 
 nPCs = 8000
 nBCs = 150
 len_sim = 10000  # ms
+spike_th_PC = 19.85800072  # (optimized by Bence)
+spike_th_BC = -17.48690645  # (optimized by Bence)
 
 
-def _avg_rate(rate, bin_, zoomed=False):
+def plot_raster(spike_times, spiking_neurons, rate, hist, linear, color_, multiplier_):
     """
-    Helper function to bin rate for bar plots
-    :param rate: np.array representing firing rates (hard coded for 10000ms simulations)
-    :param bin_: bin size
-    :param zoomed: bool for zoomed in plots
-    """
-        
-    t = np.linspace(0, len_sim, len(rate))
-    t0 = 0 if not zoomed else 9900
-    t1 = np.arange(t0, len_sim, bin_)
-    t2 = t1 + bin_    
-    avg_rate = np.zeros_like(t1, dtype=np.float)
-    for i, (t1_, t2_) in enumerate(zip(t1, t2)):
-        avg_ = np.mean(rate[np.where((t1_ <= t) & (t < t2_))])
-        if avg_ != 0.:
-            avg_rate[i] = avg_
-        
-    return avg_rate
-
-
-def plot_raster_ISI(spike_times, spiking_neurons, rate, hist, color_, multiplier_):
-    """
-    Saves figure with raster plot, NEST like rate below and ISI distribution
+    Saves figure with raster plot and NEST like rate below
     :param spike_times, spiking_neurons: used for raster plot (see `detect_oscillation.py/preprocess_monitors()`)
-    :param hist: used for plotting InterSpikeInterval histogram (see `detect_oscillations.py/preprocess_monitors()`)
-    :param color_, multiplier_: outline and naming parameters
+    :param rate: firing rate of the population
+    :param hist: used for plotting ISI histogram (see `detect_oscillations.py/preprocess_monitors()`)
+    :param linear: bool for linear/circular replay (slightly different plots)
+    :param color_, multiplier_: outline and naming parameters    
     """
 
     fig = plt.figure(figsize=(10, 8))
-    gs = gridspec.GridSpec(3, 1, height_ratios=[3, 1, 2])
+    if linear:
+        gs = gridspec.GridSpec(3, 1, height_ratios=[3, 1, 1])
+    else:
+        gs = gridspec.GridSpec(3, 1, height_ratios=[3, 1, 2])
     
     ax = fig.add_subplot(gs[0])
     ax.scatter(spike_times, spiking_neurons, c=color_, marker=".", s=12)
-    ax.set_title("PC_population")
+    ax.set_title("PC_population raster")
     ax.set_xlabel("Time (ms)")
     ax.set_xlim([0, len_sim])    
     ax.set_ylim([0, nPCs])
@@ -74,17 +56,19 @@ def plot_raster_ISI(spike_times, spiking_neurons, rate, hist, color_, multiplier
     ax2.set_xlim([0, len_sim])
     ax2.set_xlabel("Time (ms)")
     ax2.set_ylabel("Rate (Hz)")
-
+    
     ax3 = fig.add_subplot(gs[2])
     sns.despine(ax=ax3)
-    ax3.bar(hist[1][:-1], hist[0], width=50, align="edge", color=color_, edgecolor="black", linewidth=0.5, alpha=0.9)  # width=50 comes from bins=20 
-    ax3.axvline(150, ls="--", c="gray", label="ROI for replay analysis")
-    ax3.axvline(850, ls="--", c="gray")
-    ax3.set_title("PC_population ISI distribution")
+    ax3.bar(hist[1][:-1], hist[0], width=50, align="edge", color=color_, edgecolor="black", linewidth=0.5, alpha=0.9)  # width=50 comes from bins=20
+    if not linear:
+        ax3.axvline(150, ls="--", c="gray", label="ROI for replay analysis")
+        ax3.axvline(850, ls="--", c="gray")
+        ax3.legend()
+    ax3.set_title("ISI distribution")
     ax3.set_xlabel("$\Delta t$ (ms)")
     ax3.set_xlim([0, 1000])
     ax3.set_ylabel("Count")
-    ax3.legend()
+    plt.yscale("log")
 
     fig.tight_layout()
 
@@ -92,75 +76,95 @@ def plot_raster_ISI(spike_times, spiking_neurons, rate, hist, color_, multiplier
     fig.savefig(fig_name)
 
 
-def plot_PSD(rate, rate_ac, f, Pxx, title_, color_, multiplier_, TFR=False, coefs=None, freqs=None):
+def plot_PSD(rate, rate_ac, f, Pxx, title_, color_, multiplier_):
     """
     Saves figure with rate, autocorrelation plot, PSD and optionally TFR
     :param rate: firing rate - precalculated by `detect_oscillation.py/preprocess_spikes()`
     :param rate_ac: autocorrelation function of the rate (see `detect_oscillation.py/analyse_rate()`)
     :param f, Pxx: estimated PSD and frequencies used (see `detect_oscillation.py/analyse_rate()`)
-    :param title_, color_, multiplier: outline and naming parameters
-    :param TFR: bool - to plot time frequency representation
-    :param coefs, freqs: coefficients from wavelet transform and frequencies used (see `pywt.cwt()` in `detect_oscillations.py`)
+    :param title_, color_, multiplier: outline and naming parameters    
     """
 
     bin_ = 20
     avg_rate = _avg_rate(rate, bin_)
 
-    rate_ac_plot = rate_ac[2:201] # 500 - 5 Hz interval
+    try:
+        Pxx_plot = np.zeros_like(Pxx); rate_ac_plot = np.zeros((Pxx.shape[0], 198))
+        for i in range(Pxx.shape[0]):
+            Pxx_plot[i, :] = 10 * np.log10(Pxx[i, :] / max(Pxx[i, :]))
+            if rate_ac[i].shape[0] >= 201:
+                rate_ac_plot[i, :] = rate_ac[i][2:201]
+            else:
+                rate_ac_plot[i, 0:rate_ac[i].shape[0]-2] = rate_ac[i][2:201]
+        Pxx_plot_mean = np.mean(Pxx_plot, axis=0)
+        rate_ac_plot_mean = np.mean(rate_ac_plot, axis=0)
+    except:
+        Pxx_plot_mean = 10 * np.log10(Pxx / max(Pxx))
+        rate_ac_plot_mean = rate_ac[2:201]
+    f = np.asarray(f)
+    f_ripple = f[np.where((150 < f) & (f < 220))]; Pxx_ripple_plot = Pxx_plot_mean[np.where((150 < f) & (f < 220))]
+    f_gamma = f[np.where((30 < f) & (f < 100))]; Pxx_gamma_plot = Pxx_plot_mean[np.where((30 < f) & (f < 100))]
     
-    f = np.asarray(f)    
-    f_ripple = f[np.where((150 < f) & (f < 220))]; Pxx_ripple = Pxx[np.where((150 < f) & (f < 220))]
-    f_gamma = f[np.where((30 < f) & (f < 100))]; Pxx_gamma = Pxx[np.where((30 < f) & (f < 100))]
-    Pxx_plot = 10 * np.log10(Pxx / max(Pxx))
-    Pxx_ripple_plot = 10 * np.log10(Pxx_ripple / max(Pxx))
-    Pxx_gamma_plot = 10 * np.log10(Pxx_gamma / max(Pxx))
-    
-    if TFR:
-        fig = plt.figure(figsize=(15, 8))
-        
-        ax = fig.add_subplot(2, 2, 1)    
-        ax2 = fig.add_subplot(2, 2, 2)        
-        ax3 = fig.add_subplot(2, 2, 4)  # name changed to match 3 subplot version
-        
-        ax4 = fig.add_subplot(2, 2, 3)
-        i = ax4.imshow((np.abs(coefs))**2, cmap=plt.get_cmap("jet"), interpolation=None)
-        ax4.set_title("Wavlet transform of rate")
-        ax4.set_xlabel("Time (ms)")
-        ax4.set_xticks([0, 499, 999, 1499, 1999]); ax4.set_xticklabels([4000, 4500, 5000, 5500, 6000])
-        ax4.set_ylabel("Frequency (Hz)")
-        ax4.set_yticks(np.arange(0, 800, 50)); ax4.set_yticklabels(["%.1f"%i for i in freqs[::50]])
-    
-    else:    
-        fig = plt.figure(figsize=(10, 8))
-        
-        ax = fig.add_subplot(3, 1, 1)
-        ax.set_xlabel("Time (ms)")
-        ax2 = fig.add_subplot(3, 1, 2)
-        ax3 = fig.add_subplot(3, 1, 3)
-       
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(3, 1, 1)
+
     ax.bar(np.linspace(0, len_sim, len(avg_rate)), avg_rate, width=bin_, align="edge", color=color_, edgecolor="black", linewidth=0.5, alpha=0.9)
     ax.set_xlim([0, len_sim])
     ax.set_title("%s rate"%title_)
+    ax.set_xlabel("Time (ms)")
     ax.set_ylabel("Rate (Hz)")
     
-    ax2.plot(np.linspace(2, 200, len(rate_ac_plot)), rate_ac_plot, color=color_)
+    ax2 = fig.add_subplot(3, 1, 2)
+    try:
+        for rate_ac_plot_tmp in rate_ac_plot:
+            ax2.plot(np.linspace(2, 200, len(rate_ac_plot_tmp)), rate_ac_plot_tmp, lw=0.5, color="gray", alpha=0.5)
+    except:
+        pass
+    ax2.plot(np.linspace(2, 200, len(rate_ac_plot_mean)), rate_ac_plot_mean, color=color_)
     ax2.set_title("Autocorrelogram (500-5 Hz)")
-    ax2.set_xlabel("Time (ms)")
+    ax2.set_xlabel("Time shift (ms)")
     ax2.set_xlim([2, 200])
     ax2.set_ylabel("Autocorrelation")
     
-    ax3.plot(f, Pxx_plot, color=color_, marker="o")
+    ax3 = fig.add_subplot(3, 1, 3)
+    try:
+        for Pxx_plot_tmp in Pxx_plot:
+            ax3.plot(f, Pxx_plot_tmp, lw=0.5, color="gray", alpha=0.5)
+    except:
+        pass
+    ax3.plot(f, Pxx_plot_mean, color=color_, marker="o")
     ax3.plot(f_ripple, Pxx_ripple_plot, "r-", marker="o", linewidth=1.5, label="ripple (150-220 Hz)")
     ax3.plot(f_gamma, Pxx_gamma_plot, "k-", marker="o", linewidth=1.5, label="gamma (30-100 Hz)")
     ax3.set_title("Power Spectrum Density")
     ax3.set_xlim([0, 500])
     ax3.set_xlabel("Frequency (Hz)")
     ax3.set_ylabel("PSD (dB)")
-    ax3.legend()      
+    ax3.legend()
 
     sns.despine()
     fig.tight_layout()
     fig_name = os.path.join(fig_dir, "%.2f_%s.png"%(multiplier_, title_))
+    fig.savefig(fig_name)
+    
+    
+def plot_TFR(coefs, freqs, title_, fig_name):
+    """
+    Saves figure with time frequency representation
+    :param coefs, freqs: coefficients from wavelet transform and frequencies used (see `pywt.cwt()` in `detect_oscillations/analyse_rate()`)
+    :param title_, fig_name: outline and naming parameters
+    """
+
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(1, 1, 1)
+    
+    i = ax.imshow((np.abs(coefs))**2, cmap=plt.get_cmap("jet"), aspect="auto", interpolation=None)
+    fig.colorbar(i)
+    ax.set_title("Wavlet transform of %s"%title_)
+    ax.set_xlabel("Time (ms)")
+    ax.set_ylabel("Frequency (Hz)")
+    ax.set_yticks(np.arange(0, 200, 20)); ax.set_yticklabels(["%.1f"%i for i in freqs[::20]])
+    
+    #fig_name = os.path.join(fig_dir, "%.2f_%s_wt.png"%(multiplier_, title_))
     fig.savefig(fig_name)
 
 
@@ -201,8 +205,8 @@ def plot_zoomed(spike_times, spiking_neurons, rate, title_, color_, multiplier_,
     zoom_from = len_sim - 100  # ms
 
     # get last 100ms of raster
-    ROI = [np.where(spike_times > zoom_from)[0]]  # hard coded for 10000ms...
-    spike_times = spike_times[ROI]; spiking_neurons = spiking_neurons[ROI]
+    idx = np.where(spike_times > zoom_from)
+    spike_times = spike_times[idx]; spiking_neurons = spiking_neurons[idx]
     
     bin_ = 2
     avg_rate = _avg_rate(rate, bin_, zoomed=True)
@@ -332,6 +336,33 @@ def plot_detailed(StateM, subset, multiplier_, plot_adaptation=True):
     fig.tight_layout()
     fig_name = os.path.join(fig_dir, "%.2f_PC_population_zoomed_detailed.png"%multiplier_)
     fig.savefig(fig_name)
+
+
+def plot_posterior_trajectory(X_posterior, fitted_path, R, fig_name, temporal_res=10):
+    """
+    Saves plot with the posterior distribution Pr(x|spikes) and fitted trajectory
+    :param X_posterior: posterior matrix (see `bayesian_decoding.py`)
+    :param fitted_path: fitted trajectory (see `bayesian_decoding.py`)
+    :param R: godness of fit (see `bayesian_decoding.py`)
+    :param fig_name: name of saved img
+    :param temporal_res: temporal resolution used for binning spikes (used only for xlabel scaling)
+    """
+    
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(1, 1, 1)
+    
+    i = ax.imshow(X_posterior, cmap=plt.get_cmap("jet"), aspect="auto", interpolation="nearest", origin="lower")
+    fig.colorbar(i)
+    ax.autoscale(False)
+    ax.plot(fitted_path-5, color="white", lw=2)
+    ax.plot(fitted_path+5, color="white", lw=2)
+    ax.set_xticklabels(ax.get_xticks().astype(int)*temporal_res)
+    ax.set_xlabel("Time (ms)")
+    ax.set_ylabel("Sampled position")
+    ax.set_title("Posterior matrix and fitted path (R = %.2f)"%R)
+    
+    fig.savefig(fig_name)
+    plt.close(fig)
 
 
 def plot_LFP(t, LFP, f, Pxx, multiplier_):
@@ -515,64 +546,6 @@ def plot_weights(incomming_weights, save_name):
     ax.legend()
 
     fig_name = os.path.join(fig_dir, "%s.png"%save_name)
-    fig.savefig(fig_name)
-
-
-def plot_posterior(X_posterior, save_name):
-    """
-    Saves plot with the posterior distribution Pr(x|spikes) for every given time bin
-    :param X_posterior: posterior matrix (see `bayesian_decoding.py`)
-    :param save_name: name of saved img
-    """
-    
-    X_posterior = X_posterior[:,::3]
-    X_posterior[np.where(X_posterior < 5e-3)] = np.nan
-
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(1, 1, 1)
-    cmap = plt.get_cmap("jet")
-    cmap.set_bad(color="white")
-    i = ax.imshow(X_posterior, cmap=cmap, origin="lower")
-    ax.set_title("Posterior distribution Pr(x|spikes)")
-    ax.set_xlabel("Time (ms)")
-    ax.set_xticks([0, 133, 267, 400, 533, 667]); ax.set_xticklabels([0, 2000, 4000, 6000, 8000, 10000])
-    ax.set_ylabel("Location along the circle (degree)")
-    #fig.colorbar(i)
-    
-    fig_name = os.path.join(fig_dir, "%s.png"%save_name)
-    fig.savefig(fig_name)
-    
-    
-def plot_trajectory(spike_times, spiking_neurons, temporal_points, ML_est, fit, save_name):
-    """
-    Saves plot with maximum likelihood estimated locations and fitted continuous trajectory (frac function)
-    :param temporal_points: temporal points used to estimate location
-    :param ML_est: 
-    :param fit: fitted function (same lenght as temporal_points)
-    :param save_name: name of saved img
-    """
-    
-    fig = plt.figure(figsize=(10, 8))
-    
-    ax = fig.add_subplot(2, 1, 1)
-    ax.scatter(spike_times, spiking_neurons, c="blue", marker=".", s=12)
-    ax.set_title("PC raster")
-    ax.set_xlabel("Time (ms)")
-    ax.set_xlim([0, len_sim])    
-    ax.set_ylim([0, nPCs])
-    ax.set_ylabel("Neuron ID")
-    
-    ax2 = fig.add_subplot(2, 1, 2)
-    ax2.scatter(temporal_points, ML_est, color="blue", marker=".", s=15)
-    ax2.plot(temporal_points, fit, color="red")
-    ax2.set_title("ML estimated locations and trajectory fit (frac function)")
-    ax2.set_xlabel("Normalized time")
-    ax2.set_xlim([0, 1])
-    ax2.set_ylabel("Normalized place")
-    ax2.set_ylim([0, 1])
-    
-    fig.tight_layout()
-    fig_name = os.path.join(base_path, "figures", "%s.png"%save_name)
     fig.savefig(fig_name)
 
 
