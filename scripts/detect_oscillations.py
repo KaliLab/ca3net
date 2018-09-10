@@ -7,10 +7,12 @@ authors: András Ecker, Bence Bagi, Eszter Vértes, Szabolcs Káli last update: 
 import pickle
 import numpy as np
 from scipy import signal, misc
+from bayesian_decoding import *
 
 
 Erev_E = 0.0
 Erev_I = -70.0
+len_sim = 10000
 volume_cond = 1 / 3.54
 
 
@@ -20,14 +22,14 @@ def preprocess_monitors(SM, RM, calc_ISI=True):
     :param SM: Brian2 SpikeMonitor
     :param RM: Brian2 PopulationRateMonitor
     :param calc_ISI: bool for calculating ISIs
-    :return spike_times, spiking_neurons: used for raster plots
-            rate: firing rate of the population (hard coded to use 1*ms bins!)
+    :return spike_times, spiking_neurons: 2 lists: spike times and corresponding neuronIDs
+            rate: firing rate of the population
             ISI_hist and ISI_bin_edges: bin heights and edges of the histogram of the ISI of the population
     """
 
     spike_times = np.array(SM.t_) * 1000.  # *1000 ms conversion
     spiking_neurons = np.array(SM.i_)
-    tmp_spike_times = SM.spike_trains().items() 
+    tmp_spike_times = SM.spike_trains().items()
     rate = np.array(RM.rate_).reshape(-1, 10).mean(axis=1)
 
     if calc_ISI:
@@ -39,36 +41,130 @@ def preprocess_monitors(SM, RM, calc_ISI=True):
         return spike_times, spiking_neurons, rate
 
 
-def replay(ISI, th=0.7):
+def replay_circular(ISI_hist, th=0.7):
     """
-    Decides if there is a replay or not:
-    searches for the max # of spikes (and plus one bin one left- and right side) and checks again % threshold
-    :param ISI: Inter Spike Intervals (of the pyr. pop.)
-    :param th: threshold for spike count in the highest and 2 nearest bins (set to 70%)
-    :return avg_replay_interval: counted average replay interval
+    Checks if there is sequence replay in the circular case (simply based on repetition seen in ISIs)
+    :param ISI_hist: inter spike intervals (see `preprocess_monitors()`)
+    :param th: threshold for spike count in the highest and 2 nearest bins
+    :return: replay: 1/nan for detected/non-detected replay
     """
 
-    bins_ROI = ISI
-    bin_means = np.linspace(175, 825, 14)  # hard coded...
-    max_ID = np.argmax(bins_ROI)
-    
-    if 1 <= max_ID <= len(bins_ROI) - 2:
-        bins_3 = bins_ROI[max_ID-1:max_ID+2]
-        tmp = bins_ROI[max_ID-1]*bin_means[max_ID-1] + bins_ROI[max_ID]*bin_means[max_ID] + bins_ROI[max_ID+1]*bin_means[max_ID+1]
-        avg_replay_interval = tmp / (bins_ROI[max_ID-1] + bins_ROI[max_ID] + bins_ROI[max_ID+1])
-    else:
-        bins_3 = []
+    max_ID = np.argmax(ISI_hist)
+    bins_3 = ISI_hist[max_ID-1:max_ID+2] if 1 <= max_ID <= len(ISI_hist)-2 else []
 
-    replay = np.nan
-    if sum(int(i) for i in bins_ROI) * th < sum(int(i) for i in bins_3):
-        replay = avg_replay_interval
+    replay = 1 if sum(int(i) for i in ISI_hist) * th < sum(int(i) for i in bins_3) else np.nan
 
     return replay
 
 
+def _avg_rate(rate, bin_, zoomed=False):
+    """
+    Averages rate (used also for bar plots)
+    :param rate: np.array representing firing rates (hard coded for 10000 ms simulations)
+    :param bin_: bin size
+    :param zoomed: bool for zoomed in plots
+    """
+        
+    t = np.linspace(0, len_sim, len(rate))
+    t0 = 0 if not zoomed else 9900
+    t1 = np.arange(t0, len_sim, bin_)
+    t2 = t1 + bin_    
+    avg_rate = np.zeros_like(t1, dtype=np.float)
+    for i, (t1_, t2_) in enumerate(zip(t1, t2)):
+        avg_ = np.mean(rate[np.where((t1_ <= t) & (t < t2_))])
+        if avg_ != 0.:
+            avg_rate[i] = avg_
+        
+    return avg_rate
+
+
+def _get_consecutive_sublists(list_):
+    """
+    Groups list into sublists of consecutive numbers
+    :param list_: input list to group
+    :return cons_lists: list of lists with consecutive numbers
+    """
+    
+    # get upper bounds of consecutive sublists
+    ubs = [x for x,y in zip(list_, list_[1:]) if y-x != 1]
+    
+    cons_lists = []; lb = 0    
+    for ub in ubs:
+        tmp = [x for x in list_[lb:] if x <= ub]
+        cons_lists.append(tmp)
+        lb += len(tmp)
+    cons_lists.append([x for x in list_[lb:]])
+    
+    return cons_lists
+
+
+def slice_high_activity(rate, bin_=20, min_len=100.0, th=1.75):
+    """
+    Slices out high network activity - which will be candidates for replay detection
+    :param rate: firing rate of the population
+    :param bin: bin size for rate averaging (see `_avg_rate()`)
+    :param min_len: minimum length of continuous high activity (in ms)
+    :param th: rate threshold (above which is 'high activity')
+    """
+    
+    idx = np.where(_avg_rate(rate, bin_) > th)[0]
+    high_act = _get_consecutive_sublists(idx.tolist())
+    slice_idx = []
+    for tmp in high_act:
+        if len(tmp) >= np.floor(min_len/bin_):
+            slice_idx.append((tmp[0]*bin_, tmp[-1]*bin_))
+            
+    if not slice_idx:
+        print "Sustained high network activity can't be detected (with bin size:%i, min length: %.1f and %.2f threshold)!"%(bin_, min_len, th)
+            
+    return slice_idx
+
+
+def replay_linear(spike_times, spiking_neurons, slice_idx, f_in_PFs, N, delta_t=10, n_spatial_points=50):
+    """
+    Checks if there is sequence replay, using methods originating from Davison et al. 2009 (see more in `bayesian_decoding.py`)
+    :param spike_times, spiking_neurons: see `preprocess_monitors()`
+    :param slice_idx: time idx used to slice out high activity states (see `slice_high_activity()`)
+    :param f_in_PFs: filename of saved place fields (used for tuning curves, see `bayesian_decoding/load_tuning_curves()`)
+    :param N: number of shuffled versions tested (significance test, see `bayesian_decoding/test_significance()`)
+    :param delta_t: length of time bins used for decoding (in ms)
+    :param n_spatial_points: number of spatial points to consider for decoding    
+    :return: significance: 1/nan for significant/non-significant replay detected
+             results: dictinary of stored results
+    """
+    
+    if slice_idx: 
+        spatial_points = np.linspace(0, 2*np.pi, n_spatial_points)
+        pklf_name = os.path.join(base_path, "files", f_in_PFs)
+        tuning_curves = load_tuning_curves(pklf_name, spatial_points)
+
+        sign_replays = []; results = {}
+        for bounds in slice_idx:  # iterate through sustained high activity periods
+            lb = bounds[0]; ub = bounds[1]
+            idx = np.where((lb <= spike_times) & (spike_times < ub))
+            spike_times_tmp = spike_times[idx]
+            spiking_neurons_tmp = spiking_neurons[idx]
+            t_bins = np.arange(np.floor(lb), np.ceil(ub)+delta_t, delta_t)
+            bin_spike_counts = extract_binspikecount(t_bins, spike_times_tmp, spiking_neurons_tmp, tuning_curves)
+            
+            # decode place of the animal and try to fit path
+            X_posterior = calc_posterior(bin_spike_counts, tuning_curves, delta_t)
+            R, fitted_path, _ = fit_trajectory(X_posterior)
+            sign, shuffled_Rs = test_significance(bin_spike_counts, tuning_curves, delta_t, R, N)
+            
+            sign_replays.append(sign)
+            results[bounds] = {"X_posterior":X_posterior, "fitted_path":fitted_path, "R":R, "shuffled_Rs":shuffled_Rs, "significance":sign}
+        
+        significance = 1 if not np.isnan(sign_replays).all() else np.nan
+           
+        return significance, results
+    else:
+        return np.nan, {}
+
+
 def _autocorrelation(x):
     """
-    Computes the autocorrelation/serial correlation of a time series (to find repeating patterns)
+    Computes the autocorrelation of a time series (to find repetitive patterns)
     R(\tau) = \frac{E[(X_t - \mu)(X_{t+\tau} - \mu)]}{\sigma^2}
     :param x: time series
     :return: autocorrelation
@@ -79,13 +175,28 @@ def _autocorrelation(x):
     autocorrelation = np.correlate(x, x, mode="same") / x_var
 
     return autocorrelation[len(autocorrelation)/2:]
-
-
-def analyse_rate(rate, fs=1000., TFR=False):
+    
+    
+def _calc_spectrum(time_series, fs, nperseg=512):
+    """
+    Estimates the power spectral density of the signal using Welch's method
+    :param time_series: time series to analyse
+    :param fs: sampling frequency
+    :param nperseg: length of segments used in periodogram averaging
+    :return f: frequencies used to evaluate PSD
+            Pxx: estimated PSD
+    """
+    
+    f, Pxx = signal.welch(time_series, fs, nperseg=nperseg)
+    return f, Pxx
+        
+        
+def analyse_rate(rate, fs, slice_idx, TFR=False):
     """
     Basic analysis of firing rate: autocorrelatio, PSD, TFR (wavelet analysis)
     :param rate: firing rate of the neuron population
     :param fs: sampling frequency (for the spectral analysis)
+    :param slice_idx: time idx used to slice out high activity states (see `slice_high_activity()`)
     :param TFR: bool - calculate time freq. repr. (using wavelet analysis)
     :return: mean_rate, rate_ac: mean rate, autocorrelation of the rate
              max_ac, t_max_ac: maximum autocorrelation, time interval of maxAC
@@ -93,29 +204,53 @@ def analyse_rate(rate, fs=1000., TFR=False):
              coefs, freqs: coefficients from wavelet transform and frequencies used
     """
     
-    mean_rate = np.mean(rate)
-    
-    rate_ac = _autocorrelation(rate)
-    max_ac = rate_ac[1:].max()
-    t_max_ac = rate_ac[1:].argmax()+1
-    
-    f, Pxx = signal.welch(rate, fs, nperseg=512)
-    
-    if not TFR:
-        return mean_rate, rate_ac, max_ac, t_max_ac, f, Pxx
-    else:
-        import pywt        
-        #pywt.scale2frequency("morl", scale) / (1/fs)
-        scales = np.linspace(3.5, 25, 800)        
-        coefs, freqs = pywt.cwt(rate[4000:6000], scales, "morl", 1/fs)  # use only the middle 2s
+    if slice_idx:
+        t = np.arange(0, 10000); rates = []
+        for bounds in slice_idx:  # iterate through sustained high activity periods
+            lb = bounds[0]; ub = bounds[1]
+            rates.append(rate[np.where((lb <= t) & (t < ub))[0]])
+            
+        mean_rates = [np.mean(rate) for rate in rates]
         
-        return mean_rate, rate_ac, max_ac, t_max_ac, f, Pxx, coefs, freqs
+        rate_acs = [_autocorrelation(rate) for rate in rates]
+        max_acs = [rate_ac[1:].max() for rate_ac in rate_acs]
+        t_max_acs = [rate_ac[1:].argmax()+1 for rate_ac in rate_acs]
+                    
+        PSDs = [_calc_spectrum(rate, fs=fs, nperseg=256) for rate in rates if rate.shape[0] > 256]
+        f = PSDs[0][0]
+        Pxxs = np.array([tmp[1] for tmp in PSDs])
+        
+        if not TFR:
+            return np.mean(mean_rates), rate_acs, np.mean(max_acs), np.mean(t_max_acs), f, Pxxs
+        else:
+            import pywt 
+            #pywt.scale2frequency("morl", scale) / (1/fs)
+            scales = np.linspace(3.5, 25, 200)
+            wts = [pywt.cwt(rate, scales, "morl", 1/fs) for rate in rates]
+            coefs = np.array([tmp[0] for tmp in wts])
+            freqs = wts[0][0]
+            
+            return np.mean(mean_rates), rate_acs, np.mean(max_acs), np.mean(t_max_acs), f, Pxxs, coefs, freqs
+            
+    else:
+        rate_ac = _autocorrelation(rate)
+        f, Pxx = _calc_spectrum(rate, fs=fs, nperseg=256)
+        
+        if not TFR:
+            return np.mean(rate), rate_ac, rate_ac[1:].max(), rate_ac[1:].argmax()+1, f, Pxx
+        else:
+            import pywt
+            #pywt.scale2frequency("morl", scale) / (1/fs)
+            scales = np.linspace(3.5, 25, 200)
+            coefs, freqs = pywt.cwt(rate, scales, "morl", 1/fs)
+            
+            return np.mean(rate), rate_ac, rate_ac[1:].max(), rate_ac[1:].argmax()+1, f, Pxx, coefs, freqs
 
 
 def _fisher(Pxx):
     """
     Performs Fisher g-test on PSD (see Fisher 1929: http://www.jstor.org/stable/95247?seq=1#page_scan_tab_contents)
-    :param Pxx: spectrum (returned by scipy.signal.welch)
+    :param Pxx: power spectral density (see `_calc_spectrum()`)
     :return p_val: p-value
     """
 
@@ -126,7 +261,7 @@ def _fisher(Pxx):
     return p_val
 
 
-def ripple(rate_ac, f, Pxx, p_th=0.05):
+def ripple(rate_acs, f, Pxx, slice_idx=[], p_th=0.05):
     """
     Decides if there is a significant high freq. ripple oscillation by applying Fisher g-test (on the spectrum)
     :param rate_ac: auto correlation function of rate see `analyse_rate()`
@@ -136,21 +271,32 @@ def ripple(rate_ac, f, Pxx, p_th=0.05):
              avg_ripple_freq, ripple_power: average frequency and power of ripple band oscillation
     """
 
-    max_ac_ripple = rate_ac[3:9].max()  # random hard coded values by Eszter...
-    t_max_ac_ripple = rate_ac[3:9].argmax()+3
-    
     f = np.asarray(f)
-    Pxx_ripple = Pxx[np.where((150 < f) & (f < 220))]
-    
-    p_val = _fisher(Pxx_ripple)
-    avg_ripple_freq = f[np.where(150 < f)[0][0] + Pxx_ripple.argmax()] if p_val < p_th else np.nan
+    if slice_idx:
+        max_ac_ripple = [rate_ac[3:9].max() for rate_ac in rate_acs]  # hard coded values in ripple range (works with 1ms binning...)
+        t_max_ac_ripple = [rate_ac[3:9].argmax()+3 for rate_ac in rate_acs]
+                
+        p_vals = []; freqs = []; ripple_powers = []
+        for i in range(Pxx.shape[0]):
+            Pxx_ripple = Pxx[i, :][np.where((150 < f) & (f < 220))]
+            p_vals.append(_fisher(Pxx_ripple))
+            freqs.append(Pxx_ripple.argmax())
+            ripple_powers.append((sum(Pxx_ripple) / sum(Pxx[i, :])) * 100)
+
+        idx = np.where(np.asarray(p_vals) <= p_th)[0]
+        avg_ripple_freq = f[np.where(150 < f)[0][0] + np.mean(freqs[idx])] if idx else np.nan
+
+        return np.mean(max_ac_ripple), np.mean(t_max_ac_ripple), avg_ripple_freq, np.mean(ripple_powers)
+    else:
+        Pxx_ripple = Pxx[np.where((150 < f) & (f < 220))]
+        p_val = _fisher(Pxx_ripple)
+        avg_ripple_freq = f[np.where(150 < f)[0][0] + Pxx_ripple.argmax()] if p_val < p_th else np.nan
+        ripple_power = (sum(Pxx_ripple) / sum(Pxx)) * 100
         
-    ripple_power = (sum(Pxx_ripple) / sum(Pxx)) * 100
-
-    return max_ac_ripple, t_max_ac_ripple, avg_ripple_freq, ripple_power
+        return rate_acs[3:9].max(), rate_acs[3:9].argmax()+3, avg_ripple_freq, ripple_power
 
 
-def gamma(f, Pxx, p_th=0.05):
+def gamma(f, Pxx, slice_idx=[], p_th=0.05):
     """
     Decides if there is a significant gamma freq. oscillation by applying Fisher g-test (on the spectrum)
     :param Pxx, f: calculated power spectrum of the neural activity (and frequencies used to calculate it) see `analyse_rate()`
@@ -159,14 +305,25 @@ def gamma(f, Pxx, p_th=0.05):
     """
 
     f = np.asarray(f)
-    Pxx_gamma = Pxx[np.where((30 < f) & (f < 100))]
-    
-    p_val = _fisher(Pxx_gamma)
-    avg_gamma_freq = f[np.where(30 < f)[0][0] + Pxx_gamma.argmax()] if p_val < p_th else np.nan
+    if slice_idx:                
+        p_vals = []; freqs = []; gamma_powers = []
+        for i in range(Pxx.shape[0]):
+            Pxx_gamma = Pxx[i, :][np.where((30 < f) & (f < 100))]
+            p_vals.append(_fisher(Pxx_gamma))
+            freqs.append(Pxx_gamma.argmax())
+            gamma_powers.append((sum(Pxx_gamma) / sum(Pxx[i, :])) * 100)
 
-    gamma_power = (sum(Pxx_gamma) / sum(Pxx)) * 100
-
-    return avg_gamma_freq, gamma_power
+        idx = np.where(np.asarray(p_vals) <= p_th)[0]
+        avg_gamma_freq = f[np.where(30 < f)[0][0] + np.mean(freqs[idx])] if idx else np.nan
+        
+        return avg_gamma_freq, np.mean(gamma_powers)
+    else:
+        Pxx_gamma = Pxx[np.where((30 < f) & (f < 100))]
+        p_val = _fisher(Pxx_gamma)
+        avg_gamma_freq = f[np.where(30 < f)[0][0] + Pxx_gamma.argmax()] if p_val < p_th else np.nan
+        gamma_power = (sum(Pxx_gamma) / sum(Pxx)) * 100
+        
+        return avg_gamma_freq, gamma_power
     
     
 def _estimate_LFP(StateM, subset):
@@ -216,14 +373,8 @@ def analyse_estimated_LFP(StateM, subset, fs=10000.):
     t, LFP = _estimate_LFP(StateM, subset)
     LFP = _filter_LFP(LFP, fs)
 
-    f, Pxx = signal.welch(LFP, fs, nperseg=8192)
+    f, Pxx = _calc_spectrum(LFP, fs, nperseg=8192)
     
     return t, LFP, f, Pxx
     
-
-        
-
-    
-
-    
-    
+   

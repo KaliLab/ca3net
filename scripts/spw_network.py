@@ -158,7 +158,7 @@ def run_simulation(wmx_PC_E, STDP_mode, detailed=True, LFP=False, que=False, sav
     C_PC_MF.connect(j='i')
     
     if que:
-        # generate short (200ms) Poisson spike train at 20Hz (with PoissonGroup one can't specify the duration)
+        # generate short (200ms) Poisson spike train at 20Hz (with `PoissonGroup()` one can't specify the duration)
         from poisson_proc import hom_poisson
         
         spike_times = np.asarray(hom_poisson(20.0, t_max=0.2, seed=12345))
@@ -198,6 +198,7 @@ def run_simulation(wmx_PC_E, STDP_mode, detailed=True, LFP=False, que=False, sav
     SM_BC = SpikeMonitor(BCs)
     RM_PC = PopulationRateMonitor(PCs)
     RM_BC = PopulationRateMonitor(BCs)
+    
     if detailed:
         selection = np.arange(0, nPCs, 100)  # subset of neurons for recoring variables 
         if LFP:
@@ -213,10 +214,9 @@ def run_simulation(wmx_PC_E, STDP_mode, detailed=True, LFP=False, que=False, sav
     if save_spikes:
         spike_times = np.array(SM_PC.t_) * 1000.  # *1000 ms conversion
         spiking_neurons = np.array(SM_PC.i_)
-        
+        rate = np.array(RM_PC.rate_).reshape(-1, 10).mean(axis=1)
         f_name = os.path.join(base_path, "files", "sim_spikes_%s.npz"%STDP_mode)
-        np.savez(f_name, spike_times=spike_times, spiking_neurons=spiking_neurons)
-        print "PC spikes saved"
+        np.savez(f_name, spike_times=spike_times, spiking_neurons=spiking_neurons, rate=rate)
     
     if detailed:
         return SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC
@@ -224,39 +224,55 @@ def run_simulation(wmx_PC_E, STDP_mode, detailed=True, LFP=False, que=False, sav
         return SM_PC, SM_BC, RM_PC, RM_BC
         
        
-def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier,
+def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier, linear=False, f_in_PFs=None, dir_name=None,
                     detailed=False, selection=None, StateM_PC=None, StateM_BC=None, TFR=False, analyse_LFP=False, verbose=False):
     """
     Analyses results from simulations (see `detect_oscillations.py`)
     :param SM_PC, SM_BC, RM_PC, RM_BC: Brian2 spike and rate monitors of PC and BC populations (see `run_simulation()`)
     :param multiplier: weight matrix multiplier (see `spw_network_wmx_mult.py`)
+    :param linear: bool for linear/circular weight matrix (more advanced replay detection is used in linear case)
+    :param f_in_PFs: file name of saved place fileds used for replay detection in the linear case
+    :param dir_name: subdirectory name used to save replay detection figures in linear case
     :param detailed, selection, StateM_PC, StateM_BC: for more detailed plots
-    :param TFR: bool - calculate time freq. repr. (using wavelet analysis)
-    :param verbose: bool - printing results
+    :param TFR: bool for calculating time freq. repr. (using wavelet analysis) or not
+    :param analyse_LFP: bool for analysing LFP or not
+    :param verbose: bool for printing results or not
     """
 
     if SM_PC.num_spikes > 0 and SM_BC.num_spikes > 0:  # check if there is any activity
 
-        spike_times_PC, spiking_neurons_PC, rate_PC, ISI_hist, bin_edges = preprocess_monitors(SM_PC, RM_PC)
+        spike_times_PC, spiking_neurons_PC, rate_PC, ISI_hist_PC, bin_edges_PC = preprocess_monitors(SM_PC, RM_PC)
         spike_times_BC, spiking_neurons_BC, rate_BC = preprocess_monitors(SM_BC, RM_BC, calc_ISI=False)
-        avg_replay_interval = replay(ISI_hist[3:16])  # bins from 150 to 850 (range of interest)
+        
+        if linear:
+            if verbose:
+                print "Detecting replay..."
+            slice_idx = slice_high_activity(rate_PC)
+            replay, replay_results = replay_linear(spike_times_PC, spiking_neurons_PC, slice_idx, f_in_PFs, N=20)
+        else:
+            slice_idx = []
+            replay = replay_circular(ISI_hist_PC[3:16])  # bins from 150 to 850 (range of interest)
         
         if TFR:
-            mean_rate_PC, rate_ac_PC, max_ac_PC, t_max_ac_PC, f_PC, Pxx_PC, coefs_PC, freqs_PC = analyse_rate(rate_PC, TFR=True)
-            mean_rate_BC, rate_ac_BC, max_ac_BC, t_max_ac_BC, f_BC, Pxx_BC, coefs_BC, freqs_BC = analyse_rate(rate_BC, TFR=True)
+            mean_rate_PC, rate_ac_PC, max_ac_PC, t_max_ac_PC, f_PC, Pxx_PC, coefs_PC, freqs_PC = analyse_rate(rate_PC, 1000., slice_idx, TFR=True)
+            mean_rate_BC, rate_ac_BC, max_ac_BC, t_max_ac_BC, f_BC, Pxx_BC, coefs_BC, freqs_BC = analyse_rate(rate_BC, 1000., slice_idx, TFR=True)
         else:
-            mean_rate_PC, rate_ac_PC, max_ac_PC, t_max_ac_PC, f_PC, Pxx_PC = analyse_rate(rate_PC)
-            mean_rate_BC, rate_ac_BC, max_ac_BC, t_max_ac_BC, f_BC, Pxx_BC = analyse_rate(rate_BC)
-        max_ac_ripple_PC, t_max_ac_ripple_PC, avg_ripple_freq_PC, ripple_power_PC = ripple(rate_ac_PC, f_PC, Pxx_PC)
-        max_ac_ripple_BC, t_max_ac_ripple_BC, avg_ripple_freq_BC, ripple_power_BC = ripple(rate_ac_BC, f_BC, Pxx_BC)
-        avg_gamma_freq_PC, gamma_power_PC = gamma(f_PC, Pxx_PC)       
-        avg_gamma_freq_BC, gamma_power_BC = gamma(f_BC, Pxx_BC)
+            mean_rate_PC, rate_ac_PC, max_ac_PC, t_max_ac_PC, f_PC, Pxx_PC = analyse_rate(rate_PC, 1000., slice_idx, TFR=False)
+            mean_rate_BC, rate_ac_BC, max_ac_BC, t_max_ac_BC, f_BC, Pxx_BC = analyse_rate(rate_BC, 1000., slice_idx, TFR=False)
+            
+        max_ac_ripple_PC, t_max_ac_ripple_PC, avg_ripple_freq_PC, ripple_power_PC = ripple(rate_ac_PC, f_PC, Pxx_PC, slice_idx)
+        max_ac_ripple_BC, t_max_ac_ripple_BC, avg_ripple_freq_BC, ripple_power_BC = ripple(rate_ac_BC, f_BC, Pxx_BC, slice_idx)
+        avg_gamma_freq_PC, gamma_power_PC = gamma(f_PC, Pxx_PC, slice_idx)       
+        avg_gamma_freq_BC, gamma_power_BC = gamma(f_BC, Pxx_BC, slice_idx)
         
         if analyse_LFP:
             t_LFP, LFP, f_LFP, Pxx_LFP = analyse_estimated_LFP(StateM_PC, selection)
         
         if verbose:
-            print "Average replay interval: %.3f"%avg_replay_interval
+            if not np.isnan(replay):
+                print "Replay detected!"
+            else:
+                print "No replay..."
             print "Mean excitatory rate: %.3f"%mean_rate_PC
             print "Mean inhibitory rate: %.3f"%mean_rate_BC
             print "Average exc. ripple freq: %.3f"%avg_ripple_freq_PC
@@ -264,15 +280,25 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier,
             print "Average inh. ripple freq: %.3f"%avg_ripple_freq_BC
             print "Inh. ripple power: %.3f"%ripple_power_BC
 
-        plot_raster_ISI(spike_times_PC, spiking_neurons_PC, rate_PC, [ISI_hist, bin_edges], "blue", multiplier_=multiplier)
-        if TFR:
-            plot_PSD(rate_PC, rate_ac_PC, f_PC, Pxx_PC, "PC_population", "blue", multiplier_=multiplier,
-                     TFR=True, coefs=coefs_PC, freqs=freqs_PC)
-            plot_PSD(rate_BC, rate_ac_BC, f_BC, Pxx_BC, "BC_population", "green", multiplier_=multiplier,
-                     TFR=True, coefs=coefs_BC, freqs=freqs_BC)
+        if linear:
+            plot_raster(spike_times_PC, spiking_neurons_PC, rate_PC, [ISI_hist_PC, bin_edges_PC], True, "blue", multiplier_=multiplier)
+            if slice_idx:
+                if not os.path.isdir(dir_name):
+                    os.mkdir(dir_name)
+                for bounds, tmp in replay_results.iteritems():
+                    fig_name = os.path.join(dir_name, "%i-%i"%(bounds[0], bounds[1]))
+                    plot_posterior_trajectory(tmp["X_posterior"], tmp["fitted_path"], tmp["R"], fig_name)
         else:
-            plot_PSD(rate_PC, rate_ac_PC, f_PC, Pxx_PC, "PC_population", "blue", multiplier_=multiplier)
-            plot_PSD(rate_BC, rate_ac_BC, f_BC, Pxx_BC, "BC_population", "green", multiplier_=multiplier)
+            plot_raster(spike_times_PC, spiking_neurons_PC, rate_PC, [ISI_hist_PC, bin_edges_PC], False, "blue", multiplier_=multiplier)
+        
+        plot_PSD(rate_PC, rate_ac_PC, f_PC, Pxx_PC, "PC_population", "blue", multiplier_=multiplier)
+        plot_PSD(rate_BC, rate_ac_BC, f_BC, Pxx_BC, "BC_population", "green", multiplier_=multiplier)
+        if TFR:
+            if linear:
+                pass #TODO: implement this properly
+            else:
+                plot_TFR(coefs_PC, freqs_PC, "PC_population", os.path.join(base_path, figures, "%.2f_PC_population_wt.png"%multiplier))
+                plot_TFR(coefs_BC, freqs_BC, "BC_population", os.path.join(base_path, figures, "%.2f_BC_population_wt.png"%multiplier))
    
         if detailed:
             subset = plot_zoomed(spike_times_PC, spiking_neurons_PC, rate_PC, "PC_population", "blue", multiplier_=multiplier,
@@ -291,7 +317,7 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier,
         if verbose:
             print "No activity!"
             
-    return [multiplier, avg_replay_interval, mean_rate_PC, mean_rate_BC,
+    return [multiplier, replay, mean_rate_PC, mean_rate_BC,
             avg_ripple_freq_PC, ripple_power_PC, avg_ripple_freq_BC, ripple_power_BC,
             avg_gamma_freq_PC, gamma_power_PC, avg_gamma_freq_BC, gamma_power_BC,
             max_ac_PC, max_ac_ripple_PC, max_ac_BC, max_ac_ripple_BC]
@@ -300,19 +326,21 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier,
 if __name__ == "__main__":
 
     try:
-        STDP_mode = sys.argv[1]       
+        STDP_mode = sys.argv[1]
     except:
         STDP_mode = "asym"
     assert STDP_mode in ["sym", "asym"]
     
     place_cell_ratio = 0.5
-    f_in = "wmx_%s_%.1f.pkl"%(STDP_mode, place_cell_ratio)
+    linear = True 
+    f_in = "wmx_%s_%.1f_linear.pkl"%(STDP_mode, place_cell_ratio) if linear else "wmx_%s_%.1f.pkl"%(STDP_mode, place_cell_ratio)
+    f_in_PFs = "PFstarts_%s_linear.pkl"%place_cell_ratio if linear else None
+    dir_name = os.path.join(base_path, "figures", "%.2f_replay_det_%s_%.1f"%(1, STDP_mode, place_cell_ratio)) if linear else None    
     detailed = True; TFR = False; analyse_LFP = False
-    que = False; save_spikes = False; verbose = True
+    que = False; save_spikes = True; verbose = True
     
     if not detailed:
         analyse_LFP = False
-        print "Without `detailed` recording LFP can't be estimated..."
         
     pklf_name = os.path.join(base_path, "files", f_in)
     wmx_PC_E = load_wmx(pklf_name) * 1e9  # *1e9 nS conversion
@@ -320,13 +348,14 @@ if __name__ == "__main__":
     if detailed:
         SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC = run_simulation(wmx_PC_E, STDP_mode, detailed=True,
                                                                                      LFP=analyse_LFP, que=que, save_spikes=save_spikes, verbose=verbose)
-        _ = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier=1,
+        _ = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier=1, linear=linear, f_in_PFs=f_in_PFs, dir_name=dir_name,
                             detailed=True, selection=selection, StateM_PC=StateM_PC, StateM_BC=StateM_BC,
                             TFR=TFR, analyse_LFP=analyse_LFP, verbose=verbose)
     else:
         SM_PC, SM_BC, RM_PC, RM_BC = run_simulation(wmx_PC_E, STDP_mode, detailed=False, que=que, save_spikes=save_spikes, verbose=verbose)
-        _ = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier=1, detailed=False, TFR=TFR, verbose=verbose)
+        _ = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier=1, linear=linear, f_in_PFs=f_in_PFs, dir_name=dir_name,
+                            detailed=False, TFR=TFR, verbose=verbose)
 
-    plt.show()      
+    plt.show()
                  
                  
