@@ -1,4 +1,3 @@
-#!/usr/bin/python
 # -*- coding: utf8 -*-
 """
 Generates hippocampal like spike trains (see also helper file: `poisson_proc.py`)
@@ -33,7 +32,7 @@ def save_place_fields(place_cells, phi_starts, pklf_name):
         pickle.dump(place_fields, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def generate_spike_train(n_neurons, place_cell_ratio, linear=False, ordered=True, seed=12345):
+def generate_spike_train(n_neurons, place_cell_ratio, linear=False, ordered=True, seed=1234):
     """
     Generates hippocampal like spike trains (used later for learning the weights via STDP)
     :param n_neurons: #{neurons}
@@ -59,9 +58,10 @@ def generate_spike_train(n_neurons, place_cell_ratio, linear=False, ordered=True
             phi_starts = np.random.rand(n_neurons)[place_cells] * 2*np.pi
     else:  # only subtle differences...
         if ordered:
+            assert place_cell_ratio != 1, "This implementation won't work with PF ratio 1..."
             place_cells = np.sort(pyrandom.sample(range(0, int(n_neurons*0.9)), int(n_neurons*place_cell_ratio)), kind="mergesort")
             phi_starts = np.sort(np.random.rand(n_neurons), kind="mergesort")[place_cells] * 2*np.pi
-            assert phi_starts[-1] < (2*np.pi - 0.1 * 2*np.pi)
+            assert phi_starts[-1] < (2*np.pi - 0.1 * 2*np.pi), "Change random seed and rerun..."
             
             pklf_name = os.path.join(base_path, "files", "PFstarts_%s_linear.pkl"%place_cell_ratio)
             save_place_fields(place_cells, phi_starts, pklf_name)
@@ -85,11 +85,11 @@ def generate_spike_train(n_neurons, place_cell_ratio, linear=False, ordered=True
 
 if __name__ == "__main__":
 
-    n_neurons = 8000
+    n_neurons = 8000    
     place_cell_ratio = 0.5
-    linear = False
-    f_out = "spike_trains_%.1f_new.npz"%place_cell_ratio; ordered = True
-    #f_out = "intermediate_spike_trains_%s_new.npz"%place_cell_ratio; ordered = False
+    linear = True
+    f_out = "spike_trains_%.1f_linear.npz"%place_cell_ratio if linear else "spike_trains_%.1f.npz"%place_cell_ratio; ordered = True 
+    #f_out = "intermediate_spike_trains_%.1f_linear.npz"%place_cell_ratio if linear else "intermediate_spike_trains_%.1f.npz"%place_cell_ratio; ordered = False
 
     spike_trains = generate_spike_train(n_neurons, place_cell_ratio, linear=linear, ordered=ordered)
     spike_trains = refractoriness(spike_trains)  # clean spike train (based on refractory period)

@@ -1,9 +1,8 @@
-#!/usr/bin/python
 # -*- coding: utf8 -*-
 """
-Helper functions for generating hippocampal like spike trains (absolutely not the most efficient way)
-Setup: many repetitions on a circular track
-authors: András Ecker, Eszter Vértes, Szabolcs Káli last update: 02.2018
+Functions used for generating hippocampal like spike trains
+Setup: many repetitions on a circular track (linear track is implemented with covering only parts of the circle with place fields - see `generate_spike_train.py`)
+authors: András Ecker, Eszter Vértes, Szabolcs Káli last update: 08.2018
 """
 
 import numpy as np
