@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf8 -*-
 """
-Estimates position from spike trains and fits trajectory of the animal (used for sequence replay detection)
+Functions used for estimating position from spike trains and fitting trajectory of the animal (used for sequence replay detection)
 based on: Davison et al. 2009 (the difference is that the tau_i(x) tuning curves are known here, since we generated them... see: `poisson_proc.py`)
 author: András Ecker last update: 09.2018
 """
@@ -15,20 +15,6 @@ from scipy.signal import convolve2d
 from scipy.special import factorial
 import multiprocessing as mp
 from poisson_proc import get_tuning_curve
-
-
-base_path = os.path.sep.join(os.path.abspath("__file__").split(os.path.sep)[:-2])
-nPCs = 8000
-    
-    
-def load_spikes(npzf_name):
-    """Loads in spike times and corresponding neuron IDx"""
-    
-    npz_f = np.load(npzf_name)
-    spike_times = npz_f["spike_times"]
-    spiking_neurons = npz_f["spiking_neurons"]
-       
-    return spike_times, spiking_neurons
 
     
 def _load_PF_starts(pklf_name):
@@ -52,7 +38,7 @@ def load_tuning_curves(pklf_name, spatial_points):
     :return: tuning_curves: dict of tuning curves {neuronID: tuning curve}
     """
     
-    place_fields = _load_PF_starts(pklf_name)    
+    place_fields = _load_PF_starts(pklf_name)
     tuning_curves = {neuron_id: get_tuning_curve(spatial_points, phi_start) for neuron_id, phi_start in place_fields.iteritems()}
 
     return tuning_curves
@@ -110,8 +96,7 @@ def calc_posterior(bin_spike_counts, tuning_curves, delta_t):
         for j, (neuron_id, n_spike) in enumerate(spikes.iteritems()):
             expected_spikes[:, j] = tuning_curves[neuron_id] * delta_t
             n_spikes[:, j] = n_spike
-        for j in range(n_spatial_points):
-            n_factorials[j, :] = factorial(spikes.values())
+            n_factorials[:, j] = factorial(n_spike).item()
         
         # calculate likelihood
         likelihoods = np.power(expected_spikes, n_spikes)  # dim:x*i_spiking
@@ -240,37 +225,5 @@ def test_significance(bin_spike_counts, tuning_curves, delta_t, R, N):
     significance = 1 if R > np.percentile(Rs, 95) else np.nan
     
     return significance, sorted(Rs)
-
-
-if __name__ == "__main__":
-
-    # these functions are mostly used by `detect_oscillations.py` for replay detection, but can be tested by running this main
-
-    import sys
-    try:
-        STDP_mode = sys.argv[1]       
-    except:
-        STDP_mode = "asym"
-    assert STDP_mode in ["sym", "asym"]
-    
-    place_cell_ratio = 0.5
-    f_in_spikes = "sim_spikes_%s.npz"%STDP_mode
-    f_in_PFs = "PFstarts_%s_linear.pkl"%place_cell_ratio
-    
-    delta_t = 10.0  # ms
-    temporal_points = np.arange(0, 10000, delta_t)
-    n_spatial_points = 50
-    spatial_points = np.linspace(0, 2*np.pi, n_spatial_points)
-    
-    npzf_name = os.path.join(base_path, "files", f_in_spikes)
-    spike_times, spiking_neurons = load_spikes(npzf_name)   
-    pklf_name = os.path.join(base_path, "files", f_in_PFs)
-    tuning_curves = load_tuning_curves(pklf_name, spatial_points)
-    
-    bin_spike_counts = extract_binspikecount(temporal_points, spike_times, spiking_neurons, tuning_curves)
-    X_posterior = calc_posterior(bin_spike_counts, tuning_curves, delta_t)
-    R, _, _ = fit_trajectory(X_posterior)
-    
-    significance, _ = test_significance(bin_spike_counts, tuning_curves, delta_t, R, 10)
 
 
