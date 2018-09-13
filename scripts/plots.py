@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 """
-Helper file to plot dynamics, weight matrix and couple of other things
-authors: Bence Bagi, András Ecker, last update: 09.2017
+Helper functions to plot dynamics, weight matrix and couple of other things
+authors: András Ecker, Bence Bagi last update: 09.2018
 """
 
 import os
@@ -42,7 +42,6 @@ def plot_raster(spike_times, spiking_neurons, rate, hist, linear, color_, multip
     ax = fig.add_subplot(gs[0])
     ax.scatter(spike_times, spiking_neurons, c=color_, marker=".", s=12)
     ax.set_title("PC_population raster")
-    ax.set_xlabel("Time (ms)")
     ax.set_xlim([0, len_sim])    
     ax.set_ylim([0, nPCs])
     ax.set_ylabel("Neuron ID")
@@ -74,6 +73,33 @@ def plot_raster(spike_times, spiking_neurons, rate, hist, linear, color_, multip
 
     fig_name = os.path.join(fig_dir, "%.2f*.png"%multiplier_)
     fig.savefig(fig_name)
+    
+    
+def plot_posterior_trajectory(X_posterior, fitted_path, R, fig_name, temporal_res=10):
+    """
+    Saves plot with the posterior distribution Pr(x|spikes) and fitted trajectory
+    :param X_posterior: posterior matrix (see `bayesian_decoding.py`)
+    :param fitted_path: fitted trajectory (see `bayesian_decoding.py`)
+    :param R: godness of fit (see `bayesian_decoding.py`)
+    :param fig_name: name of saved img
+    :param temporal_res: temporal resolution used for binning spikes (used only for xlabel scaling)
+    """
+    
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(1, 1, 1)
+    
+    i = ax.imshow(X_posterior, cmap=plt.get_cmap("jet"), aspect="auto", interpolation="nearest", origin="lower")
+    fig.colorbar(i)
+    ax.autoscale(False)
+    ax.plot(fitted_path-5, color="white", lw=2)
+    ax.plot(fitted_path+5, color="white", lw=2)
+    ax.set_xticklabels(ax.get_xticks().astype(int)*temporal_res)
+    ax.set_xlabel("Time (ms)")
+    ax.set_ylabel("Sampled position")
+    ax.set_title("Posterior matrix and fitted path (R = %.2f)"%R)
+    
+    fig.savefig(fig_name)
+    plt.close(fig)
 
 
 def plot_PSD(rate, rate_ac, f, Pxx, title_, color_, multiplier_):
@@ -164,8 +190,8 @@ def plot_TFR(coefs, freqs, title_, fig_name):
     ax.set_ylabel("Frequency (Hz)")
     ax.set_yticks(np.arange(0, 200, 20)); ax.set_yticklabels(["%.1f"%i for i in freqs[::20]])
     
-    #fig_name = os.path.join(fig_dir, "%.2f_%s_wt.png"%(multiplier_, title_))
     fig.savefig(fig_name)
+    plt.close(fig)
 
 
 def _select_subset(selection, ymin, ymax):
@@ -336,33 +362,6 @@ def plot_detailed(StateM, subset, multiplier_, plot_adaptation=True):
     fig.tight_layout()
     fig_name = os.path.join(fig_dir, "%.2f_PC_population_zoomed_detailed.png"%multiplier_)
     fig.savefig(fig_name)
-
-
-def plot_posterior_trajectory(X_posterior, fitted_path, R, fig_name, temporal_res=10):
-    """
-    Saves plot with the posterior distribution Pr(x|spikes) and fitted trajectory
-    :param X_posterior: posterior matrix (see `bayesian_decoding.py`)
-    :param fitted_path: fitted trajectory (see `bayesian_decoding.py`)
-    :param R: godness of fit (see `bayesian_decoding.py`)
-    :param fig_name: name of saved img
-    :param temporal_res: temporal resolution used for binning spikes (used only for xlabel scaling)
-    """
-    
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(1, 1, 1)
-    
-    i = ax.imshow(X_posterior, cmap=plt.get_cmap("jet"), aspect="auto", interpolation="nearest", origin="lower")
-    fig.colorbar(i)
-    ax.autoscale(False)
-    ax.plot(fitted_path-5, color="white", lw=2)
-    ax.plot(fitted_path+5, color="white", lw=2)
-    ax.set_xticklabels(ax.get_xticks().astype(int)*temporal_res)
-    ax.set_xlabel("Time (ms)")
-    ax.set_ylabel("Sampled position")
-    ax.set_title("Posterior matrix and fitted path (R = %.2f)"%R)
-    
-    fig.savefig(fig_name)
-    plt.close(fig)
 
 
 def plot_LFP(t, LFP, f, Pxx, multiplier_):
