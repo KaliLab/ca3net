@@ -1,19 +1,19 @@
 # -*- coding: utf8 -*-
 """
-helper file to extract dynamic features: checking replay interval by ISI, computing AC and PSD of population rate
-authors: András Ecker, Bence Bagi, Eszter Vértes, Szabolcs Káli last update: 11.2017
+Functions used to extract dynamic features: detecting sequence replay, computing AC and PSD of population rate, checking for significant frequencies, ...
+authors: András Ecker, Bence Bagi, Eszter Vértes, Szabolcs Káli last update: 09.2018
 """
 
 import pickle
 import numpy as np
 from scipy import signal, misc
-from bayesian_decoding import *
+from bayesian_decoding import load_tuning_curves, extract_binspikecount, calc_posterior, fit_trajectory, test_significance
 
 
-Erev_E = 0.0
-Erev_I = -70.0
-len_sim = 10000
-volume_cond = 1 / 3.54
+Erev_E = 0.0  # mV
+Erev_I = -70.0  # mV
+len_sim = 10000  # ms
+volume_cond = 1 / 3.54  # S/m
 
 
 def preprocess_monitors(SM, RM, calc_ISI=True):
@@ -120,12 +120,12 @@ def slice_high_activity(rate, bin_=20, min_len=100.0, th=1.75):
     return slice_idx
 
 
-def replay_linear(spike_times, spiking_neurons, slice_idx, f_in_PFs, N, delta_t=10, n_spatial_points=50):
+def replay_linear(spike_times, spiking_neurons, slice_idx, pklf_name, N, delta_t=10, n_spatial_points=50):
     """
     Checks if there is sequence replay, using methods originating from Davison et al. 2009 (see more in `bayesian_decoding.py`)
     :param spike_times, spiking_neurons: see `preprocess_monitors()`
     :param slice_idx: time idx used to slice out high activity states (see `slice_high_activity()`)
-    :param f_in_PFs: filename of saved place fields (used for tuning curves, see `bayesian_decoding/load_tuning_curves()`)
+    :param pklf_name: filename of saved place fields (used for tuning curves, see `bayesian_decoding/load_tuning_curves()`)
     :param N: number of shuffled versions tested (significance test, see `bayesian_decoding/test_significance()`)
     :param delta_t: length of time bins used for decoding (in ms)
     :param n_spatial_points: number of spatial points to consider for decoding    
@@ -135,7 +135,6 @@ def replay_linear(spike_times, spiking_neurons, slice_idx, f_in_PFs, N, delta_t=
     
     if slice_idx: 
         spatial_points = np.linspace(0, 2*np.pi, n_spatial_points)
-        pklf_name = os.path.join(base_path, "files", f_in_PFs)
         tuning_curves = load_tuning_curves(pklf_name, spatial_points)
 
         sign_replays = []; results = {}
@@ -162,17 +161,17 @@ def replay_linear(spike_times, spiking_neurons, slice_idx, f_in_PFs, N, delta_t=
         return np.nan, {}
 
 
-def _autocorrelation(x):
+def _autocorrelation(time_series):
     """
     Computes the autocorrelation of a time series (to find repetitive patterns)
     R(\tau) = \frac{E[(X_t - \mu)(X_{t+\tau} - \mu)]}{\sigma^2}
-    :param x: time series
+    :param time_series: time series to analyse
     :return: autocorrelation
     """
 
-    x_var = np.var(x)
-    x = x - np.mean(x)
-    autocorrelation = np.correlate(x, x, mode="same") / x_var
+    var = np.var(time_series)
+    time_series = time_series - np.mean(time_series)
+    autocorrelation = np.correlate(time_series, time_series, mode="same") / var
 
     return autocorrelation[len(autocorrelation)/2:]
     
@@ -223,12 +222,12 @@ def analyse_rate(rate, fs, slice_idx, TFR=False):
         if not TFR:
             return np.mean(mean_rates), rate_acs, np.mean(max_acs), np.mean(t_max_acs), f, Pxxs
         else:
-            import pywt 
-            #pywt.scale2frequency("morl", scale) / (1/fs)
-            scales = np.linspace(3.5, 25, 200)
+            import pywt
+            
+            scales = np.linspace(3.5, 5, 200)  # 162-232 Hz  pywt.scale2frequency("morl", scale) / (1/fs)
             wts = [pywt.cwt(rate, scales, "morl", 1/fs) for rate in rates]
-            coefs = np.array([tmp[0] for tmp in wts])
-            freqs = wts[0][0]
+            coefs = [tmp[0] for tmp in wts]
+            freqs = wts[0][1]
             
             return np.mean(mean_rates), rate_acs, np.mean(max_acs), np.mean(t_max_acs), f, Pxxs, coefs, freqs
             
@@ -240,8 +239,8 @@ def analyse_rate(rate, fs, slice_idx, TFR=False):
             return np.mean(rate), rate_ac, rate_ac[1:].max(), rate_ac[1:].argmax()+1, f, Pxx
         else:
             import pywt
-            #pywt.scale2frequency("morl", scale) / (1/fs)
-            scales = np.linspace(3.5, 25, 200)
+            
+            scales = np.linspace(3.5, 5, 200)  # 162-232 Hz  pywt.scale2frequency("morl", scale) / (1/fs)
             coefs, freqs = pywt.cwt(rate, scales, "morl", 1/fs)
             
             return np.mean(rate), rate_ac, rate_ac[1:].max(), rate_ac[1:].argmax()+1, f, Pxx, coefs, freqs
@@ -263,9 +262,10 @@ def _fisher(Pxx):
 
 def ripple(rate_acs, f, Pxx, slice_idx=[], p_th=0.05):
     """
-    Decides if there is a significant high freq. ripple oscillation by applying Fisher g-test (on the spectrum)
-    :param rate_ac: auto correlation function of rate see `analyse_rate()`
-    :param Pxx, f: calculated power spectrum of the neural activity (and frequencies used to calculate it) see `analyse_rate()`
+    Decides if there is a significant high freq. ripple oscillation by applying Fisher g-test on the power spectrum
+    :param rate_acs: auto correlation function(s) of rate see (`analyse_rate()`)
+    :param f, Pxx: calculated power spectrum of the neural activity and frequencies used to calculate it (see `analyse_rate()`)
+    :param slice_idx: time idx used to slice out high activity states (see `slice_high_activity()`)
     :param p_th: significance threshold for Fisher g-test
     :return: max_ac_ripple, t_max_ac_ripple: maximum autocorrelation in ripple range, time interval of maxACR
              avg_ripple_freq, ripple_power: average frequency and power of ripple band oscillation
@@ -283,8 +283,9 @@ def ripple(rate_acs, f, Pxx, slice_idx=[], p_th=0.05):
             freqs.append(Pxx_ripple.argmax())
             ripple_powers.append((sum(Pxx_ripple) / sum(Pxx[i, :])) * 100)
 
-        idx = np.where(np.asarray(p_vals) <= p_th)[0]
-        avg_ripple_freq = f[np.where(150 < f)[0][0] + np.mean(freqs[idx])] if idx else np.nan
+        idx = np.where(np.asarray(p_vals) <= p_th)[0].tolist()
+        avg_freq = np.mean(np.asarray(freqs)[idx])
+        avg_ripple_freq = f[np.where(150 < f)[0][0] + int(avg_freq)] if idx else np.nan
 
         return np.mean(max_ac_ripple), np.mean(t_max_ac_ripple), avg_ripple_freq, np.mean(ripple_powers)
     else:
@@ -298,8 +299,9 @@ def ripple(rate_acs, f, Pxx, slice_idx=[], p_th=0.05):
 
 def gamma(f, Pxx, slice_idx=[], p_th=0.05):
     """
-    Decides if there is a significant gamma freq. oscillation by applying Fisher g-test (on the spectrum)
-    :param Pxx, f: calculated power spectrum of the neural activity (and frequencies used to calculate it) see `analyse_rate()`
+    Decides if there is a significant gamma freq. oscillation by applying Fisher g-test on the power spectrum
+    :param f, Pxx: calculated power spectrum of the neural activity and frequencies used to calculate it (see `analyse_rate()`)
+    :param slice_idx: time idx used to slice out high activity states (see `slice_high_activity()`)
     :param p_th: significance threshold for Fisher g-test
     :return: avg_gamma_freq, gamma_power: average frequency and power of the oscillation
     """
@@ -313,8 +315,10 @@ def gamma(f, Pxx, slice_idx=[], p_th=0.05):
             freqs.append(Pxx_gamma.argmax())
             gamma_powers.append((sum(Pxx_gamma) / sum(Pxx[i, :])) * 100)
 
-        idx = np.where(np.asarray(p_vals) <= p_th)[0]
-        avg_gamma_freq = f[np.where(30 < f)[0][0] + np.mean(freqs[idx])] if idx else np.nan
+        
+        idx = np.where(np.asarray(p_vals) <= p_th)[0].tolist()
+        avg_freq = np.mean(np.asarray(freqs)[idx])
+        avg_gamma_freq = f[np.where(30 < f)[0][0] + int(avg_freq)] if idx else np.nan
         
         return avg_gamma_freq, np.mean(gamma_powers)
     else:
@@ -350,17 +354,17 @@ def _estimate_LFP(StateM, subset):
     return t, LFP
 
 
-def _filter_LFP(LFP, fs, cut=300.):
+def _filter(time_series, fs, cut=300.):
     """
-    Low pass filters LFP (3rd order Butterworth filter)
-    :param LFP: estimated LFP (see `_calculate_LFP()`)
+    Low pass filters time series (3rd order Butterworth filter) - used for LFP
+    :param time_series: time series to analyse
     :param fs: sampling frequency
     :param cut: cut off frequency
     """
     
     b, a = signal.butter(3, cut/(fs/2.), btype="lowpass")
     
-    return signal.filtfilt(b, a, LFP, axis=0)
+    return signal.filtfilt(b, a, time_series, axis=0)
     
     
 def analyse_estimated_LFP(StateM, subset, fs=10000.):
@@ -371,7 +375,7 @@ def analyse_estimated_LFP(StateM, subset, fs=10000.):
     """
 
     t, LFP = _estimate_LFP(StateM, subset)
-    LFP = _filter_LFP(LFP, fs)
+    LFP = _filter(LFP, fs)
 
     f, Pxx = _calc_spectrum(LFP, fs, nperseg=8192)
     
