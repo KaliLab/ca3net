@@ -2,8 +2,7 @@
 """
 Creates PC (adExp IF) and BC (exp IF) population in Brian2, loads in recurrent connection matrix for PC population
 runs simulation and checks the dynamics
-(updated network, parameters are/should be closer to the experimental data!)
-authors: Bence Bagi, András Ecker last update: 08.2018
+authors: András Ecker, Bence Bagi, Szabolcs Káli last update: 09.2018
 """
 
 import os
@@ -161,18 +160,18 @@ def run_simulation(wmx_PC_E, STDP_mode, detailed=True, LFP=False, que=False, sav
         # generate short (200ms) Poisson spike train at 20Hz (with `PoissonGroup()` one can't specify the duration)
         from poisson_proc import hom_poisson
         
-        spike_times = np.asarray(hom_poisson(20.0, t_max=0.2, seed=12345))
+        spike_times = np.asarray(hom_poisson(20.0, 10, t_max=0.2, seed=12345))
         spiking_neurons = np.zeros_like(spike_times)
         for neuron_id in range(1, 100):
-            spike_times_tmp = np.asarray(hom_poisson(20.0, t_max=0.2, seed=12345+neuron_id))
+            spike_times_tmp = np.asarray(hom_poisson(20.0, 10, t_max=0.2, seed=12345+neuron_id))
             spike_times = np.concatenate((spike_times, spike_times_tmp), axis=0)
             spiking_neurons_tmp = neuron_id * np.ones_like(spike_times_tmp)
             spiking_neurons = np.concatenate((spiking_neurons, spiking_neurons_tmp), axis=0)           
         que_input = SpikeGeneratorGroup(100, spiking_neurons, spike_times*second)
     
-        # connects it to the middle of PC pop
+        # connects at the end of PC pop (...end of PFs in linear case)
         C_PC_que = Synapses(que_input, PCs, on_pre="x_ampaMF+=w_PC_MF")
-        C_PC_que.connect(i=np.arange(0, 100, 1), j=np.arange(4950, 5050, 1))
+        C_PC_que.connect(i=np.arange(0, 100), j=np.arange(7000, 7100))
     
     # weight matrix used here
     C_PC_E = Synapses(PCs, PCs, 'w_exc:1', on_pre='x_ampa+=w_exc')
@@ -224,15 +223,15 @@ def run_simulation(wmx_PC_E, STDP_mode, detailed=True, LFP=False, que=False, sav
         return SM_PC, SM_BC, RM_PC, RM_BC
         
        
-def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier, linear=False, f_in_PFs=None, dir_name=None,
+def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier, linear=False, pklf_name=None, dir_name=None,
                     detailed=False, selection=None, StateM_PC=None, StateM_BC=None, TFR=False, analyse_LFP=False, verbose=False):
     """
     Analyses results from simulations (see `detect_oscillations.py`)
     :param SM_PC, SM_BC, RM_PC, RM_BC: Brian2 spike and rate monitors of PC and BC populations (see `run_simulation()`)
     :param multiplier: weight matrix multiplier (see `spw_network_wmx_mult.py`)
     :param linear: bool for linear/circular weight matrix (more advanced replay detection is used in linear case)
-    :param f_in_PFs: file name of saved place fileds used for replay detection in the linear case
-    :param dir_name: subdirectory name used to save replay detection figures in linear case
+    :param pklf_name: file name of saved place fileds used for replay detection in the linear case
+    :param dir_name: subdirectory name used to save replay detection (and optionally TFR) figures in linear case
     :param detailed, selection, StateM_PC, StateM_BC: for more detailed plots
     :param TFR: bool for calculating time freq. repr. (using wavelet analysis) or not
     :param analyse_LFP: bool for analysing LFP or not
@@ -248,7 +247,7 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier, linear=False, f_in_P
             if verbose:
                 print "Detecting replay..."
             slice_idx = slice_high_activity(rate_PC)
-            replay, replay_results = replay_linear(spike_times_PC, spiking_neurons_PC, slice_idx, f_in_PFs, N=20)
+            replay, replay_results = replay_linear(spike_times_PC, spiking_neurons_PC, slice_idx, pklf_name, N=20)
         else:
             slice_idx = []
             replay = replay_circular(ISI_hist_PC[3:16])  # bins from 150 to 850 (range of interest)
@@ -286,7 +285,7 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier, linear=False, f_in_P
                 if not os.path.isdir(dir_name):
                     os.mkdir(dir_name)
                 for bounds, tmp in replay_results.iteritems():
-                    fig_name = os.path.join(dir_name, "%i-%i"%(bounds[0], bounds[1]))
+                    fig_name = os.path.join(dir_name, "%i-%i_replay.png"%(bounds[0], bounds[1]))
                     plot_posterior_trajectory(tmp["X_posterior"], tmp["fitted_path"], tmp["R"], fig_name)
         else:
             plot_raster(spike_times_PC, spiking_neurons_PC, rate_PC, [ISI_hist_PC, bin_edges_PC], False, "blue", multiplier_=multiplier)
@@ -295,7 +294,12 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier, linear=False, f_in_P
         plot_PSD(rate_BC, rate_ac_BC, f_BC, Pxx_BC, "BC_population", "green", multiplier_=multiplier)
         if TFR:
             if linear:
-                pass #TODO: implement this properly
+                if slice_idx:
+                    for i, bounds in enumerate(slice_idx):
+                        fig_name = os.path.join(dir_name, "%i-%i_PC_population_wt.png"%(bounds[0], bounds[1]))
+                        plot_TFR(coefs_PC[i], freqs_PC, "PC_population", fig_name)
+                        fig_name = os.path.join(dir_name, "%i-%i_BC_population_wt.png"%(bounds[0], bounds[1]))
+                        plot_TFR(coefs_BC[i], freqs_PC, "BC_population", fig_name)
             else:
                 plot_TFR(coefs_PC, freqs_PC, "PC_population", os.path.join(base_path, figures, "%.2f_PC_population_wt.png"%multiplier))
                 plot_TFR(coefs_BC, freqs_BC, "BC_population", os.path.join(base_path, figures, "%.2f_BC_population_wt.png"%multiplier))
@@ -332,13 +336,14 @@ if __name__ == "__main__":
     assert STDP_mode in ["sym", "asym"]
     
     place_cell_ratio = 0.5
-    linear = True 
-    f_in = "wmx_%s_%.1f_linear.pkl"%(STDP_mode, place_cell_ratio) if linear else "wmx_%s_%.1f.pkl"%(STDP_mode, place_cell_ratio)
-    f_in_PFs = "PFstarts_%s_linear.pkl"%place_cell_ratio if linear else None
-    dir_name = os.path.join(base_path, "figures", "%.2f_replay_det_%s_%.1f"%(1, STDP_mode, place_cell_ratio)) if linear else None    
-    detailed = True; TFR = False; analyse_LFP = False
-    que = False; save_spikes = True; verbose = True
+    linear = True
     
+    f_in = "wmx_%s_%.1f_linear.pkl"%(STDP_mode, place_cell_ratio) if linear else "wmx_%s_%.1f.pkl"%(STDP_mode, place_cell_ratio)
+    PF_pklf_name = os.path.join(base_path, "files", "PFstarts_%s_linear.pkl"%place_cell_ratio) if linear else None
+    dir_name = os.path.join(base_path, "figures", "%.2f_replay_det_%s_%.1f"%(1, STDP_mode, place_cell_ratio)) if linear else None
+    
+    que = True; save_spikes = True; verbose = True
+    detailed = True; TFR = False; analyse_LFP = False   
     if not detailed:
         analyse_LFP = False
         
@@ -348,12 +353,12 @@ if __name__ == "__main__":
     if detailed:
         SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC = run_simulation(wmx_PC_E, STDP_mode, detailed=True,
                                                                                      LFP=analyse_LFP, que=que, save_spikes=save_spikes, verbose=verbose)
-        _ = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier=1, linear=linear, f_in_PFs=f_in_PFs, dir_name=dir_name,
+        _ = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier=1, linear=linear, pklf_name=PF_pklf_name, dir_name=dir_name,
                             detailed=True, selection=selection, StateM_PC=StateM_PC, StateM_BC=StateM_BC,
                             TFR=TFR, analyse_LFP=analyse_LFP, verbose=verbose)
     else:
         SM_PC, SM_BC, RM_PC, RM_BC = run_simulation(wmx_PC_E, STDP_mode, detailed=False, que=que, save_spikes=save_spikes, verbose=verbose)
-        _ = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier=1, linear=linear, f_in_PFs=f_in_PFs, dir_name=dir_name,
+        _ = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier=1, linear=linear, pklf_name=PF_pklf_name, dir_name=dir_name,
                             detailed=False, TFR=TFR, verbose=verbose)
 
     plt.show()
