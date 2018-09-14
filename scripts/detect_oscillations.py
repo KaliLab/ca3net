@@ -318,6 +318,7 @@ def gamma(f, Pxx, slice_idx=[], p_th=0.05):
             freqs.append(Pxx_gamma.argmax())
             gamma_powers.append((sum(Pxx_gamma) / sum(Pxx[i, :])) * 100)
         
+        idx = np.where(np.asarray(p_vals) <= p_th)[0].tolist()
         if idx:
             avg_freq = np.mean(np.asarray(freqs)[idx])
             avg_gamma_freq = f[np.where(30 < f)[0][0] + int(avg_freq)]
