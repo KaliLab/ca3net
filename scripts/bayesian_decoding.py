@@ -6,9 +6,7 @@ based on: Davison et al. 2009 (the difference is that the tau_i(x) tuning curves
 author: András Ecker last update: 09.2018
 """
 
-import os
-import copy
-import pickle
+import os, copy, pickle
 import random
 import numpy as np
 from scipy.signal import convolve2d
@@ -136,41 +134,44 @@ def _evaluate_fit(X_posterior, y, band_size=3):
 
     n_spatial_points = X_posterior.shape[0]
     t = np.arange(0, X_posterior.shape[1])
+        
+    line_idx = np.clip(np.round(y)+n_spatial_points, 0, n_spatial_points*3-1).astype(int)  # convert line to matrix idx       
+    if len(np.where((n_spatial_points <= line_idx) & (line_idx < n_spatial_points*2))[0]) < n_spatial_points / 3.0:  # check if line is "long enough"
+        return 0.0
     
     mask = np.zeros((n_spatial_points*3, X_posterior.shape[1]))  # extend on top and bottom
-    line_idx = np.clip(np.round(y)+n_spatial_points, 0, n_spatial_points*3-1).astype(int)  # convert line to matrix idx
     mask[line_idx, t] = 1
-    mask = convolve2d(mask, np.ones((2*band_size+1, 1)), mode="same")  # convolve with kernel to get the width
+    mask = convolve2d(mask, np.ones((2*band_size+1, 1)), mode="same")  # convolve with kernel to get the desired band width
     mask = mask[int(n_spatial_points):int(n_spatial_points*2), :]  # remove extra padding to get X_posterior's shape
-    assert mask.shape == X_posterior.shape, "Mask dimension mismatch..."
     
     R = np.sum(np.multiply(X_posterior, mask)) / np.sum(X_posterior)
     
     return R
 
 
-def fit_trajectory(X_posterior, grid_res=100):
+def fit_trajectory(X_posterior, slope_lims=(0.5, 3), grid_res=100):
     """
     Brute force trajectory fit in the posterior matrix (based on Davison et al. 2009, see: `_evaluate_fit()`)
     :param X_posterior: posterior matrix (see `get_posterior()`)
+    :param slope_lims: lower and upper bounds of splopes to test
     :param grid_res: number of points to try along one dimension
-    :return: highest_R: best goodness of fit (`_evaluate_fit()`)
+    :return: highest_R: best goodness of fit (see `_evaluate_fit()`)
              fit: fitted line
              best_params: slope and offset parameter corresponding to the highest R
     """
     
-    slopes = np.linspace(-5., 5.0, grid_res)
+    slopes = np.concatenate((np.linspace(-slope_lims[1], -slope_lims[0], grid_res/2.0), np.linspace(slope_lims[0], slope_lims[1], grid_res/2.0)))
     offsets = np.linspace(-0.5*X_posterior.shape[0], X_posterior.shape[0]*1.5, grid_res)
     t = np.arange(0, X_posterior.shape[1])
     
-    best_params = [slopes[0], offsets[0]]; highest_R = 0.0
+    best_params = (slopes[0], offsets[0]); highest_R = 0.0
     for a in slopes:
         for b in offsets:
             y = _line(t, a, b)
             R = _evaluate_fit(X_posterior, y)
             if R > highest_R:
                 highest_R = R
-                best_params = [a, b]
+                best_params = (a, b)
     fit = _line(t, *best_params)
                
     return highest_R, fit, best_params
