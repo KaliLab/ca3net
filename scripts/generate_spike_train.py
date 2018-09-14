@@ -4,8 +4,7 @@ Generates hippocampal like spike trains (see also helper file: `poisson_proc.py`
 authors: András Ecker, Eszter Vértes, Szabolcs Káli last update: 08.2018
 """
 
-import os
-import pickle
+import os, pickle
 import numpy as np
 import random as pyrandom
 from tqdm import tqdm  # progress bar
@@ -66,6 +65,7 @@ def generate_spike_train(n_neurons, place_cell_ratio, linear=False, ordered=True
             pklf_name = os.path.join(base_path, "files", "PFstarts_%s_linear.pkl"%place_cell_ratio)
             save_place_fields(place_cells, phi_starts, pklf_name)
         else:
+            assert place_cell_ratio != 1, "This implementation won't work with PF ratio 1..."
             place_cells = pyrandom.sample(range(0, int(n_neurons*0.9)), int(n_neurons*place_cell_ratio))
             phi_starts = np.random.rand(n_neurons)[place_cells] * 2*np.pi
             
@@ -85,9 +85,10 @@ def generate_spike_train(n_neurons, place_cell_ratio, linear=False, ordered=True
 
 if __name__ == "__main__":
 
-    n_neurons = 8000    
+    n_neurons = 8000
     place_cell_ratio = 0.5
     linear = True
+    
     f_out = "spike_trains_%.1f_linear.npz"%place_cell_ratio if linear else "spike_trains_%.1f.npz"%place_cell_ratio; ordered = True 
     #f_out = "intermediate_spike_trains_%.1f_linear.npz"%place_cell_ratio if linear else "intermediate_spike_trains_%.1f.npz"%place_cell_ratio; ordered = False
 

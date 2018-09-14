@@ -5,8 +5,7 @@
 author: András Ecker last update: 08.2018
 """
 
-import os
-import sys
+import os, sys
 from brian2 import *
 set_device("cpp_standalone")  # speed up the simulation with generated C++ code
 import numpy as np
@@ -18,6 +17,7 @@ from plots import *
 
 
 base_path = os.path.sep.join(os.path.abspath("__file__").split(os.path.sep)[:-2])
+
 nPCs = 8000  # #{neurons}
 
 
@@ -74,9 +74,11 @@ if __name__ == "__main__":
     assert STDP_mode in ["asym", "sym"]
     
     place_cell_ratio = 0.5
-    f_in = "spike_trains_%.1f.npz"%place_cell_ratio
-    f_in_wmx = "intermediate_wmx_%s_%.1f.pkl"%(STDP_mode, place_cell_ratio)
-    f_out = "wmx_%s_%.1f_2envs.pkl"%(STDP_mode, place_cell_ratio)
+    linear = True
+    
+    f_in = "spike_trains_%.1f_linear.npz"%place_cell_ratio if linear else "spike_trains_%.1f.npz"%place_cell_ratio
+    f_in_wmx = "intermediate_wmx_%s_%.1f_linear.pkl"%(STDP_mode, place_cell_ratio) if linear else "intermediate_wmx_%s_%.1f.pkl"%(STDP_mode, place_cell_ratio)
+    f_out = "wmx_%s_%.1f_2envs_linear.pkl"%(STDP_mode, place_cell_ratio) if linear else "wmx_%s_%.1f_2envs.pkl"%(STDP_mode, place_cell_ratio)
                    
     # STDP parameters (see `optimization/analyse_STDP.py`)
     if STDP_mode == "asym":
@@ -84,12 +86,12 @@ if __name__ == "__main__":
         Ap = 0.01
         Am = -Ap
         wmax = 4e-8  # S
-        scale_factor = 3.55
+        scale_factor = 1.6
     elif STDP_mode == "sym":
         taup = taum = 62.5 * ms
-        Ap = Am = 5e-3
+        Ap = Am = 4e-3
         wmax = 2e-8  # S
-        scale_factor = 1.3
+        scale_factor = 0.8
     Ap *= wmax; Am *= wmax  # needed to reproduce Brian1 results
     
     f_name = os.path.join(base_path, "files", f_in)

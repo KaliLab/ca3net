@@ -6,9 +6,7 @@ updated to produce symmetric STDP curve as reported in Mishra et al. 2016 - 10.1
 author: András Ecker, based on Eszter Vértes's code last update: 11.2017
 """
 
-import os
-import sys
-import pickle
+import os, sys, pickle
 import numpy as np
 import random as pyrandom
 from brian2 import *
@@ -19,7 +17,7 @@ from plots import *
 
 base_path = os.path.sep.join(os.path.abspath("__file__").split(os.path.sep)[:-2])
 
-connection_prob_PC = 0.1  # sparseness
+connection_prob_PC = 0.1
 nPCs = 8000
 
 
@@ -110,6 +108,8 @@ if __name__ == "__main__":
     linear = True
     f_in = "spike_trains_%.1f_linear.npz"%place_cell_ratio if linear else "spike_trains_%.1f.npz"%place_cell_ratio
     f_out = "wmx_%s_%.1f_linear.pkl"%(STDP_mode, place_cell_ratio) if linear else "wmx_%s_%.1f.pkl"%(STDP_mode, place_cell_ratio)
+    #f_in = "intermediate_spike_trains_%.1f_linear.npz"%place_cell_ratio if linear else "intermediate_spike_trains_%.1f.npz"%place_cell_ratio
+    #f_out = "intermediate_wmx_%s_%.1f_linear.pkl"%(STDP_mode, place_cell_ratio) if linear else "intermediate_wmx_%s_%.1f.pkl"%(STDP_mode, place_cell_ratio)
                
     # STDP parameters (see `optimization/analyse_STDP.py`)
     if STDP_mode == "asym":
