@@ -284,8 +284,11 @@ def ripple(rate_acs, f, Pxx, slice_idx=[], p_th=0.05):
             ripple_powers.append((sum(Pxx_ripple) / sum(Pxx[i, :])) * 100)
 
         idx = np.where(np.asarray(p_vals) <= p_th)[0].tolist()
-        avg_freq = np.mean(np.asarray(freqs)[idx])
-        avg_ripple_freq = f[np.where(150 < f)[0][0] + int(avg_freq)] if idx else np.nan
+        if idx:
+            avg_freq = np.mean(np.asarray(freqs)[idx])
+            avg_ripple_freq = f[np.where(150 < f)[0][0] + int(avg_freq)]
+        else:
+            avg_ripple_freq = np.nan
 
         return np.mean(max_ac_ripple), np.mean(t_max_ac_ripple), avg_ripple_freq, np.mean(ripple_powers)
     else:
@@ -314,11 +317,12 @@ def gamma(f, Pxx, slice_idx=[], p_th=0.05):
             p_vals.append(_fisher(Pxx_gamma))
             freqs.append(Pxx_gamma.argmax())
             gamma_powers.append((sum(Pxx_gamma) / sum(Pxx[i, :])) * 100)
-
         
-        idx = np.where(np.asarray(p_vals) <= p_th)[0].tolist()
-        avg_freq = np.mean(np.asarray(freqs)[idx])
-        avg_gamma_freq = f[np.where(30 < f)[0][0] + int(avg_freq)] if idx else np.nan
+        if idx:
+            avg_freq = np.mean(np.asarray(freqs)[idx])
+            avg_gamma_freq = f[np.where(30 < f)[0][0] + int(avg_freq)]
+        else:
+            avg_gamma_freq = np.nan
         
         return avg_gamma_freq, np.mean(gamma_powers)
     else:
