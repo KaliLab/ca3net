@@ -67,8 +67,8 @@ def _avg_rate(rate, bin_, zoomed=False):
         
     t = np.linspace(0, len_sim, len(rate))
     t0 = 0 if not zoomed else 9900
-    t1 = np.arange(t0, len_sim, bin_)
-    t2 = t1 + bin_    
+    t1 = np.arange(t0, len_sim+bin_, bin_)
+    t2 = t1 + bin_
     avg_rate = np.zeros_like(t1, dtype=np.float)
     for i, (t1_, t2_) in enumerate(zip(t1, t2)):
         avg_ = np.mean(rate[np.where((t1_ <= t) & (t < t2_))])
@@ -98,7 +98,7 @@ def _get_consecutive_sublists(list_):
     return cons_lists
 
 
-def slice_high_activity(rate, bin_=20, min_len=100.0, th=1.75):
+def slice_high_activity(rate, bin_=20, min_len=200.0, th=1.75):
     """
     Slices out high network activity - which will be candidates for replay detection
     :param rate: firing rate of the population
@@ -107,12 +107,12 @@ def slice_high_activity(rate, bin_=20, min_len=100.0, th=1.75):
     :param th: rate threshold (above which is 'high activity')
     """
     
-    idx = np.where(_avg_rate(rate, bin_) > th)[0]
+    idx = np.where(_avg_rate(rate, bin_) >= th)[0]
     high_act = _get_consecutive_sublists(idx.tolist())
     slice_idx = []
     for tmp in high_act:
         if len(tmp) >= np.floor(min_len/bin_):
-            slice_idx.append((tmp[0]*bin_, tmp[-1]*bin_))
+            slice_idx.append((tmp[0]*bin_, (tmp[-1]+1)*bin_))
             
     if not slice_idx:
         print "Sustained high network activity can't be detected (with bin size:%i, min length: %.1f and %.2f threshold)!"%(bin_, min_len, th)
