@@ -116,16 +116,16 @@ def load_wmx(pklf_name):
     return wmx_PC_E
 
 
-def run_simulation(wmx_PC_E, STDP_mode, detailed=True, LFP=False, que=False, save_spikes=False, verbose=True):
+def run_simulation(wmx_PC_E, STDP_mode, detailed, LFP, que, save_spikes, verbose=True):
     """
     Sets up the network and runs simulation
     :param wmx_PC_E: np.array representing the recurrent excitatory synaptic weight matrix
     :param STDP_mode: symmetric or asymmetric weight matrix flag (used for synapse parameters)
-    :param detailed: bool - useage of multi state monitor (for membrane pot and inh. and exc. inputs of some singe cells)
+    :param detailed: bool flag for useage of multi state monitor (for membrane pot and inh. and exc. inputs of some singe cells)
     :param LFP: similar to `detailed` but more PCs are recorded
     :param que: if True it adds an other Brian2 `SpikeGeneratorGroup` to stimulate a subpop in the beginning (qued replay)
-    :param save_spikes: flag to save PC spikes after the simulation (used by `bayesian_decoding.py` later)
-    :param verbose: bool - report status of simulation
+    :param save_spikes: bool flag to save PC spikes after the simulation (used by `bayesian_decoding.py` later)
+    :param verbose: bool flag to report status of simulation
     :return SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC: Brian2 monitors (+ array of selected cells used by multi state monitor)
     """
 
@@ -219,11 +219,11 @@ def run_simulation(wmx_PC_E, STDP_mode, detailed=True, LFP=False, que=False, sav
     if detailed:
         return SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC
     else:
-        return SM_PC, SM_BC, RM_PC, RM_BC
+        return SM_PC, SM_BC, RM_PC, RM_BC, None, None, None
         
        
-def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier, linear=False, pklf_name=None, dir_name=None,
-                    detailed=False, selection=None, StateM_PC=None, StateM_BC=None, TFR=False, analyse_LFP=False, verbose=False):
+def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier, linear, pklf_name, dir_name,
+                    detailed, selection, StateM_PC, StateM_BC, TFR, analyse_LFP, verbose=True):
     """
     Analyses results from simulations (see `detect_oscillations.py`)
     :param SM_PC, SM_BC, RM_PC, RM_BC: Brian2 spike and rate monitors of PC and BC populations (see `run_simulation()`)
@@ -352,16 +352,11 @@ if __name__ == "__main__":
     pklf_name = os.path.join(base_path, "files", f_in)
     wmx_PC_E = load_wmx(pklf_name) * 1e9  # *1e9 nS conversion
         
-    if detailed:
-        SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC = run_simulation(wmx_PC_E, STDP_mode, detailed=True,
-                                                                                     LFP=analyse_LFP, que=que, save_spikes=save_spikes, verbose=verbose)
-        _ = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier=1, linear=linear, pklf_name=PF_pklf_name, dir_name=dir_name,
-                            detailed=True, selection=selection, StateM_PC=StateM_PC, StateM_BC=StateM_BC,
-                            TFR=TFR, analyse_LFP=analyse_LFP, verbose=verbose)
-    else:
-        SM_PC, SM_BC, RM_PC, RM_BC = run_simulation(wmx_PC_E, STDP_mode, detailed=False, que=que, save_spikes=save_spikes, verbose=verbose)
-        _ = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier=1, linear=linear, pklf_name=PF_pklf_name, dir_name=dir_name,
-                            detailed=False, TFR=TFR, verbose=verbose)
+    SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC = run_simulation(wmx_PC_E, STDP_mode, detailed=detailed,
+                                                                                 LFP=analyse_LFP, que=que, save_spikes=save_spikes, verbose=verbose)
+    _ = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier=1, linear=linear, pklf_name=PF_pklf_name, dir_name=dir_name,
+                        detailed=detailed, selection=selection, StateM_PC=StateM_PC, StateM_BC=StateM_BC,
+                        TFR=TFR, analyse_LFP=analyse_LFP, verbose=verbose)
 
     plt.show()
                  
