@@ -98,7 +98,7 @@ def _get_consecutive_sublists(list_):
     return cons_lists
 
 
-def slice_high_activity(rate, bin_=20, min_len=200.0, th=1.75):
+def slice_high_activity(rate, bin_=20, min_len=250.0, th=1.75):
     """
     Slices out high network activity - which will be candidates for replay detection
     :param rate: firing rate of the population
@@ -216,8 +216,9 @@ def analyse_rate(rate, fs, slice_idx, TFR=False):
         t_max_acs = [rate_ac[1:].argmax()+1 for rate_ac in rate_acs]
                     
         PSDs = [_calc_spectrum(rate, fs=fs, nperseg=256) for rate in rates if rate.shape[0] > 256]
-        f = PSDs[0][0]
+        f = PSDs[0][0]  # it might happen that PSDs will be empty because all high activity periods are shorter than 256 ms...
         Pxxs = np.array([tmp[1] for tmp in PSDs])
+            
         
         if not TFR:
             return np.mean(mean_rates), rate_acs, np.mean(max_acs), np.mean(t_max_acs), f, Pxxs
@@ -233,7 +234,7 @@ def analyse_rate(rate, fs, slice_idx, TFR=False):
             
     else:
         rate_ac = _autocorrelation(rate)
-        f, Pxx = _calc_spectrum(rate, fs=fs, nperseg=256)
+        f, Pxx = _calc_spectrum(rate, fs=fs)
         
         if not TFR:
             return np.mean(rate), rate_ac, rate_ac[1:].max(), rate_ac[1:].argmax()+1, f, Pxx
