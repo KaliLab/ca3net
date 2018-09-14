@@ -115,7 +115,7 @@ def plot_PSD(rate, rate_ac, f, Pxx, title_, color_, multiplier_):
     avg_rate = _avg_rate(rate, bin_)
 
     try:
-        Pxx_plot = np.zeros_like(Pxx); rate_ac_plot = np.zeros((Pxx.shape[0], 198))
+        Pxx_plot = np.zeros_like(Pxx); rate_ac_plot = np.zeros((Pxx.shape[0], 199))
         for i in range(Pxx.shape[0]):
             Pxx_plot[i, :] = 10 * np.log10(Pxx[i, :] / max(Pxx[i, :]))
             if rate_ac[i].shape[0] >= 201:
@@ -548,11 +548,11 @@ def plot_weights(incomming_weights, save_name):
     fig.savefig(fig_name)
 
 
-def plot_summary_replay(multipliers, avg_replay_intervals, rates_PC, rates_BC):
+def plot_summary_replay(multipliers, replay, rates_PC, rates_BC):
     """
-    Saves summary figure with avg. replay interval and avg. firing rates
+    Saves summary figure with replay (1/non) and avg. firing rates
     :param multipliers: wmx multipliers
-    :param avg_replay_intervals: avg. replay intervals (has to be the same size as multipliers)
+    :param replay: replay list of 1/np.nans (has to be the same size as multipliers)
     :param rates_PC, rates_BC: avg. exc. and inh. firing rates (have to be the same size as multipliers)
     """
 
@@ -560,8 +560,8 @@ def plot_summary_replay(multipliers, avg_replay_intervals, rates_PC, rates_BC):
 
     ax = fig.add_subplot(2, 1, 1)
     sns.despine(ax=ax)
-    ax.plot(multipliers, avg_replay_intervals, linewidth=2, marker="*")
-    ax.set_title("Average replay interval")
+    ax.plot(multipliers, replay, "b-", linewidth=2, marker="*")
+    ax.set_title("Replay")
     ax.set_xlim([multipliers[0], multipliers[-1]])
     ax.set_xticks(multipliers); ax.set_xticklabels(multipliers)
     ax.set_ylabel("Time (ms)")
