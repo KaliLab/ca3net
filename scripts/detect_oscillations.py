@@ -67,7 +67,7 @@ def _avg_rate(rate, bin_, zoomed=False):
         
     t = np.linspace(0, len_sim, len(rate))
     t0 = 0 if not zoomed else 9900
-    t1 = np.arange(t0, len_sim+bin_, bin_)
+    t1 = np.arange(t0, len_sim, bin_)
     t2 = t1 + bin_
     avg_rate = np.zeros_like(t1, dtype=np.float)
     for i, (t1_, t2_) in enumerate(zip(t1, t2)):
