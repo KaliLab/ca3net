@@ -5,8 +5,7 @@ runs simulation and checks the dynamics
 authors: András Ecker, Bence Bagi, Szabolcs Káli last update: 09.2018
 """
 
-import os
-import sys
+import os, shutil, sys, pickle
 import numpy as np
 import random as pyrandom
 from brian2 import *
@@ -138,7 +137,7 @@ def run_simulation(wmx_PC_E, STDP_mode, detailed=True, LFP=False, que=False, sav
     if STDP_mode == "asym":      
         w_PC_I = 0.22       
         w_BC_I = 7.15
-        w_PC_MF = 44.0
+        w_PC_MF = 39.0
     elif STDP_mode == "sym":
         w_PC_I = 0.23
         w_BC_I = 6.4
@@ -282,7 +281,10 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier, linear=False, pklf_n
         if linear:
             plot_raster(spike_times_PC, spiking_neurons_PC, rate_PC, [ISI_hist_PC, bin_edges_PC], True, "blue", multiplier_=multiplier)
             if slice_idx:
-                if not os.path.isdir(dir_name):
+                if os.path.isdir(dir_name):
+                    shutil.rmtree(dir_name)
+                    os.mkdir(dir_name)
+                else:
                     os.mkdir(dir_name)
                 for bounds, tmp in replay_results.iteritems():
                     fig_name = os.path.join(dir_name, "%i-%i_replay.png"%(bounds[0], bounds[1]))
@@ -342,8 +344,8 @@ if __name__ == "__main__":
     PF_pklf_name = os.path.join(base_path, "files", "PFstarts_%s_linear.pkl"%place_cell_ratio) if linear else None
     dir_name = os.path.join(base_path, "figures", "%.2f_replay_det_%s_%.1f"%(1, STDP_mode, place_cell_ratio)) if linear else None
     
-    que = True; save_spikes = True; verbose = True
-    detailed = True; TFR = False; analyse_LFP = False   
+    que = False; save_spikes = True; verbose = True
+    detailed = True; TFR = False; analyse_LFP = False
     if not detailed:
         analyse_LFP = False
         
