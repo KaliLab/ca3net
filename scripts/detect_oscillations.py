@@ -115,7 +115,7 @@ def slice_high_activity(rate, bin_=20, min_len=250.0, th=1.75):
             slice_idx.append((tmp[0]*bin_, (tmp[-1]+1)*bin_))
             
     if not slice_idx:
-        print "Sustained high network activity can't be detected (with bin size:%i, min length: %.1f and %.2f threshold)!"%(bin_, min_len, th)
+        print "Sustained high network activity can't be detected (bin size:%i, min length:%.1f and threshold:%.2f)!"%(bin_, min_len, th)
             
     return slice_idx
 
