@@ -72,7 +72,7 @@ def binarize(wmx_orig, ratio=0.05):
     return wmx_modified
     
     
-def shuffle_blocks(wmx_orig, pop_size=1000):
+def shuffle_blocks(wmx_orig, pop_size=800):
     """
     Shuffles pop_size*pop_size blocks within the martrix   
     :param wmx_orig: original weight matrix
@@ -103,36 +103,6 @@ def shuffle_blocks(wmx_orig, pop_size=1000):
             wmx_modified[i*pop_size:(i+1)*pop_size, j*pop_size:(j+1)*pop_size] = blocks[id_i, id_j]
 
     return wmx_modified
-    
-    
-def shuffle_subpop_input_weights(wmx_orig, shuffle_size=500):
-    """
-    Shuffles the input weight (within a column) of a small subpopulation at the 'end' of the matrix
-    :param wmx_orig: original weight matrix
-    :param shuffle_size: size of the subpop. to modify
-    :return: wmx_modified: modified weight matrix
-    """
-    
-    np.random.seed(12345)
-    
-    # split matrix
-    split_id = nPCs - shuffle_size
-    sub_wmx_orig_keep = wmx_orig[:, 0:split_id]
-    sub_wmx_orig_mod = wmx_orig[:, split_id:]
-    
-    # shuffle subpop
-    shuffled = sub_wmx_orig_mod[:, 0]  # stupid numpy...
-    np.random.shuffle(shuffled)
-    for i in range(1, shuffle_size):
-        tmp = sub_wmx_orig_mod[:, i]  # stupid numpy...
-        np.random.shuffle(tmp)
-        shuffled = np.vstack([shuffled, tmp])  # stack as rows and will be transposed later
-               
-    # connect to non-shuffled part
-    shuffled = np.transpose(shuffled)
-    wmx_modified = np.hstack([sub_wmx_orig_keep, shuffled])
-    
-    return wmx_modified
 
 
 if __name__ == "__main__":
@@ -144,15 +114,15 @@ if __name__ == "__main__":
     assert STDP_mode in ["sym", "asym"]
     
     place_cell_ratio = 0.5
-    f_in = "wmx_%s_%.1f.pkl"%(STDP_mode, place_cell_ratio) 
+    linear = True
+    f_in = "wmx_%s_%.1f_linear.pkl"%(STDP_mode, place_cell_ratio) if linear else "wmx_%s_%.1f.pkl"%(STDP_mode, place_cell_ratio)
     
     pklf_name = os.path.join(base_path, "files", f_in)
     wmx_orig = load_wmx(pklf_name)
     
-    #wmx_modified = shuffle(wmx_orig); f_out = "%s_shuffled.pkl"%f_in[:-4]
-    #wmx_modified = binarize(wmx_orig); f_out = "%s_binary.pkl"%f_in[:-4]
-    #wmx_modified = shuffle_blocks(wmx_orig); f_out = "%s_block_shuffled.pkl"%f_in[:-4]
-    wmx_modified = shuffle_subpop_input_weights(wmx_orig); f_out = "%s_shuffled_subpop_input.pkl"%f_in[:-4]
+    #wmx_modified = shuffle(wmx_orig); f_out = "%s_shuffled_linear.pkl"%f_in[:-11] if linear else "%s_shuffled.pkl"%f_in[:-4]
+    #wmx_modified = binarize(wmx_orig); f_out = "%s_binary_linear.pkl"%f_in[:-11] if linear else "%s_binary.pkl"%f_in[:-4]
+    wmx_modified = shuffle_blocks(wmx_orig); f_out = "%s_block_shuffled_linear.pkl"%f_in[:-11] if linear else "%s_block_shuffled.pkl"%f_in[:-4]
     
     assert np.shape(wmx_modified) == (nPCs, nPCs), "Output shape is not %i*%i"%(nPCs, nPCs)
     assert (wmx_modified >= 0.0).all(), "Negative weights in the modified matrix!"
@@ -164,7 +134,7 @@ if __name__ == "__main__":
     plot_wmx(wmx_modified, save_name=f_out[:-4])
     plot_wmx_avg(wmx_modified, n_pops=100, save_name="%s_avg"%f_out[:-4])
     plot_w_distr(wmx_modified, save_name="%s_distr"%f_out[:-4])
-    selection = np.array([500, 2000, 4000, 6000, 7500])
+    selection = np.array([500, 2400, 4000, 5500, 7015])
     plot_weights(save_selected_w(wmx_modified, selection), save_name="%s_sel_weights"%f_out[:-4])
     plt.show()
     
