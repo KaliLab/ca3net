@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 """
 Functions used for generating hippocampal like spike trains
-Setup: many repetitions on a circular track (linear track is implemented with covering only parts of the circle with place fields - see `generate_spike_train.py`)
+Setup: many repetitions on a circular track or linear [0, 2pi] track
 authors: András Ecker, Eszter Vértes, Szabolcs Káli last update: 10.2018
 """
 
@@ -70,7 +70,7 @@ def get_tuning_curve_circular(spatial_points, phi_start):
 def get_tuning_curve_linear(spatial_points, phi_start):
     """
     Calculates (not estimates) tuning curve (Gaussian function)
-    :param spatial_points: spatial points along the tract
+    :param spatial_points: spatial points along the track
     :param phi_start: starting point of the place field
     :return: tau: tuning curve of the place cell
     """
@@ -86,7 +86,7 @@ def evaluate_lambda_t(t, phi_start, linear, phase0):
     Evaluates firing rate(t, x) = tuning_curve(x) * theta_modulation(t, x) at given time points
     :param t: sample time points
     :param phi_start: starting point of the place field (in rad)
-    :param linear: flag for circular vs. linear tract -> slightly diff tuning curves
+    :param linear: flag for circular vs. linear track -> slightly diff tuning curves
     :param phase0: init. phase (used to calc. phase precession)
     :return: lambda_t sampled at the given time points
     """
@@ -116,7 +116,7 @@ def inhom_poisson(lambda_, t_max, phi_start, linear, seed, phase0=0.0):
     :param lambda_: rate of the hom. Poisson process (see `hom_poisson()`)
     :param t_max: length of the generate Poisson process
     :param phi_start: starting point of the place field (see `evaluate_lambda_t()`)
-    :param linear: flag for circular vs. linear tract (see `evaluate_lambda_t()`)
+    :param linear: flag for circular vs. linear track (see `evaluate_lambda_t()`)
     :param seed: seed for random number generation
     :param phase0: initial phase (see `evaluate_lambda_t()`)
     :return: inhom_poisson_proc: inhomogenos Poisson process representing the spike train of a place cell
