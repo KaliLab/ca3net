@@ -56,7 +56,7 @@ if __name__ == "__main__":
         results[i, :] = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier=multiplier, linear=linear, pklf_name=PF_pklf_name, dir_name=dir_name,
                                         detailed=detailed, selection=selection, StateM_PC=StateM_PC, StateM_BC=StateM_BC,
                                         TFR=TFR, analyse_LFP=analyse_LFP, verbose=verbose)
-        plt.close("all")
+        del SM_PC; del SM_BC; del RM_PC; del RM_BC; del StateM_PC; del StateM_BC; plt.close("all")
     
         
     f_name = os.path.join(base_path, "files", "results", f_out)

@@ -9,6 +9,7 @@ import os
 import numpy as np
 import random as pyrandom
 from brian2 import *
+prefs.codegen.target = "numpy"
 import matplotlib.pyplot as plt
 base_path = os.path.sep.join(os.path.abspath("__file__").split(os.path.sep)[:-3])
 # add "scripts" directory to the path (to import modules)
@@ -67,7 +68,11 @@ dx_gaba/dt = -x_gaba/decay_BC_I : 1
 
 
 def run_simulation(exc_rate):
-    """Sets up the purely inhibitory network with outer input and runs simulation"""
+    """
+    Sets up the purely inhibitory network with outer input and runs simulation
+    :param exc_rate: rate of PC population
+    :return: Brian2 monitors
+    """
 
     np.random.seed(12345)
     pyrandom.seed(12345)
@@ -94,10 +99,11 @@ def run_simulation(exc_rate):
     return SM_BC, RM_BC, StateM_BC
 
 
-def run_simulation_analyse_results(exc_rate):
-    """Runs simulation, prints out results and saves plots"""
-
-    SM_BC, RM_BC, StateM_BC = run_simulation(exc_rate)
+def analyse_results(SM_BC, RM_BC, StateM_BC):
+    """
+    Analyses results from simulations (see `detect_oscillations.py`)
+    :param SM_BC, RM_BC, StateM_BC: Brian2 spike and rate monitors of BC population (see `run_simulation()`)
+    """
     
     if SM_BC.num_spikes > 0:  # check if there is any activity
 
@@ -115,7 +121,6 @@ def run_simulation_analyse_results(exc_rate):
         plot_PSD(rate_BC, rate_ac_BC, f_BC, Pxx_BC, "BC_population", "green", multiplier_=exc_rate)        
         plot_zoomed(spike_times_BC, spiking_neurons_BC, rate_BC, "BC_population", "green", multiplier_=exc_rate,
                     PC_pop=False, StateM=StateM_BC)
-        plt.close("all")
 
     else:
 
@@ -131,6 +136,8 @@ if __name__ == "__main__":
     for exc_rate in exc_rates:   
         print "Excitatory rate: %.3f"%exc_rate
         
-        run_simulation_analyse_results(exc_rate)
+        SM_BC, RM_BC, StateM_BC = run_simulation(exc_rate)
+        analyse_results(SM_BC, RM_BC, StateM_BC)
+        del SM_BC; del RM_BC; del StateM_BC; plt.close("all")
         
         
