@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 """
 Generates hippocampal like spike trains (see also helper file: `poisson_proc.py`)
-authors: András Ecker, Eszter Vértes, Szabolcs Káli last update: 08.2018
+authors: András Ecker, Eszter Vértes, Szabolcs Káli last update: 10.2018
 """
 
 import os, pickle
@@ -31,49 +31,40 @@ def save_place_fields(place_cells, phi_starts, pklf_name):
         pickle.dump(place_fields, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def generate_spike_train(n_neurons, place_cell_ratio, linear=False, ordered=True, seed=1234):
+def generate_spike_train(n_neurons, place_cell_ratio, linear, ordered=True, seed=1234):
     """
     Generates hippocampal like spike trains (used later for learning the weights via STDP)
     :param n_neurons: #{neurons}
     :param place_cell_ratio: ratio of place cells in the whole population
-    :param linear: bool for linear vs. circular track
+    :param linear: flag for linear vs. circular track
     :param ordered: bool to order neuronIDs based on their place fields (used for teaching 2 environments - see `stdp_2nd_env.py`)
     :param seed: starting seed for random number generation
     :return: spike_trains - list of lists with indiviual neuron's spikes
     """
-    
-    # generate random neuronIDs being place cells and starting points for place fields
+        
     np.random.seed(seed)
     pyrandom.seed(seed)
-    if not linear:
-        if ordered:
-            place_cells = np.sort(pyrandom.sample(range(0, n_neurons), int(n_neurons*place_cell_ratio)), kind="mergesort")
-            phi_starts = np.sort(np.random.rand(n_neurons), kind="mergesort")[place_cells] * 2*np.pi
-            
+    
+    # generate random neuronIDs being place cells and starting points for place fields
+    if ordered:
+        place_cells = np.sort(pyrandom.sample(range(0, n_neurons), int(n_neurons*place_cell_ratio)), kind="mergesort")
+        phi_starts = np.sort(np.random.rand(n_neurons), kind="mergesort")[place_cells] * 2*np.pi
+        
+        if not linear:
             pklf_name = os.path.join(base_path, "files", "PFstarts_%s.pkl"%place_cell_ratio)
-            save_place_fields(place_cells, phi_starts, pklf_name)
         else:
-            place_cells = pyrandom.sample(range(0, n_neurons), int(n_neurons*place_cell_ratio))
-            phi_starts = np.random.rand(n_neurons)[place_cells] * 2*np.pi
-    else:  # only subtle differences...
-        if ordered:
-            assert place_cell_ratio != 1, "This implementation won't work with PF ratio 1..."
-            place_cells = np.sort(pyrandom.sample(range(0, int(n_neurons*0.9)), int(n_neurons*place_cell_ratio)), kind="mergesort")
-            phi_starts = np.sort(np.random.rand(n_neurons), kind="mergesort")[place_cells] * 2*np.pi
-            assert phi_starts[-1] < (2*np.pi - 0.1 * 2*np.pi), "Change random seed and rerun..."
-            
+            phi_starts -= 0.1*np.pi  # shift half a PF against boundary effects (mid_PFs will be in [0, 2*np.pi]...)
             pklf_name = os.path.join(base_path, "files", "PFstarts_%s_linear.pkl"%place_cell_ratio)
-            save_place_fields(place_cells, phi_starts, pklf_name)
-        else:
-            assert place_cell_ratio != 1, "This implementation won't work with PF ratio 1..."
-            place_cells = pyrandom.sample(range(0, int(n_neurons*0.9)), int(n_neurons*place_cell_ratio))
-            phi_starts = np.random.rand(n_neurons)[place_cells] * 2*np.pi
+        save_place_fields(place_cells, phi_starts, pklf_name)
+    else:
+        place_cells = pyrandom.sample(range(0, n_neurons), int(n_neurons*place_cell_ratio))
+        phi_starts = np.random.rand(n_neurons)[place_cells] * 2*np.pi
             
     # generate spike trains    
     spike_trains = []; i = 0
     for neuron_id in tqdm(range(0, n_neurons)):
         if neuron_id in place_cells:
-            spike_train = inhom_poisson(infield_rate, t_max, phi_starts[i], seed)
+            spike_train = inhom_poisson(infield_rate, t_max, phi_starts[i], linear, seed)
             i += 1
         else:
             spike_train = hom_poisson(outfield_rate, 100, t_max, seed)
@@ -89,7 +80,7 @@ if __name__ == "__main__":
     place_cell_ratio = 0.5
     linear = True
     
-    f_out = "spike_trains_%.1f_linear.npz"%place_cell_ratio if linear else "spike_trains_%.1f.npz"%place_cell_ratio; ordered = True 
+    f_out = "spike_trains_%.1f_linear.npz"%place_cell_ratio if linear else "spike_trains_%.1f.npz"%place_cell_ratio; ordered = True
     #f_out = "intermediate_spike_trains_%.1f_linear.npz"%place_cell_ratio if linear else "intermediate_spike_trains_%.1f.npz"%place_cell_ratio; ordered = False
 
     spike_trains = generate_spike_train(n_neurons, place_cell_ratio, linear=linear, ordered=ordered)

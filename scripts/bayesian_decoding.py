@@ -12,7 +12,7 @@ import numpy as np
 from scipy.signal import convolve2d
 from scipy.special import factorial
 import multiprocessing as mp
-from poisson_proc import get_tuning_curve
+from poisson_proc import get_tuning_curve_linear
 
     
 def _load_PF_starts(pklf_name):
@@ -37,7 +37,7 @@ def load_tuning_curves(pklf_name, spatial_points):
     """
     
     place_fields = _load_PF_starts(pklf_name)
-    tuning_curves = {neuron_id: get_tuning_curve(spatial_points, phi_start) for neuron_id, phi_start in place_fields.iteritems()}
+    tuning_curves = {neuron_id: get_tuning_curve_linear(spatial_points, phi_start) for neuron_id, phi_start in place_fields.iteritems()}
 
     return tuning_curves
     
