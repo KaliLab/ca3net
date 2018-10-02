@@ -43,18 +43,25 @@ def preprocess_monitors(SM, RM, calc_ISI=True):
 
 def replay_circular(ISI_hist, th=0.7):
     """
-    Checks if there is sequence replay in the circular case (simply based on repetition seen in ISIs)
+    Checks if there is sequence replay in the circular case (simply based on repetition in ISIs)
     :param ISI_hist: inter spike intervals (see `preprocess_monitors()`)
     :param th: threshold for spike count in the highest and 2 nearest bins
     :return: replay: 1/nan for detected/non-detected replay
+             avg_replay_interval: average replay interval calculated from ISIs (used only for tuning)
     """
 
     max_ID = np.argmax(ISI_hist)
     bins_3 = ISI_hist[max_ID-1:max_ID+2] if 1 <= max_ID <= len(ISI_hist)-2 else []
-
+    
     replay = 1 if sum(int(i) for i in ISI_hist) * th < sum(int(i) for i in bins_3) else np.nan
+    
+    # this part is only used for tuning...
+    bin_means = np.linspace(175, 825, 14) # hard coded variable, which only works with rate binned into 20 bins in `preprocess_monitors()`...
+    #...and [3:16] passed in `spw_network.py/analyse_results()`    
+    tmp = ISI_hist[max_ID-1]*bin_means[max_ID-1] + ISI_hist[max_ID]*bin_means[max_ID] + ISI_hist[max_ID+1]*bin_means[max_ID+1]
+    avg_replay_interval = tmp / (ISI_hist[max_ID-1] + ISI_hist[max_ID] + ISI_hist[max_ID+1])
 
-    return replay
+    return replay, avg_replay_interval
 
 
 def _avg_rate(rate, bin_, zoomed=False):
