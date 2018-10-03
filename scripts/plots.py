@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 """
 Helper functions to plot dynamics, weight matrix and couple of other things
-authors: András Ecker, Bence Bagi last update: 09.2018
+authors: András Ecker, Bence Bagi last update: 10.2018
 """
 
 import os
@@ -753,6 +753,7 @@ def plot_SS_voltage(t, v, SS_voltage, current):
     
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(1, 1, 1)
+    sns.despine()
     
     ax.plot(t, v, linewidth=1.5, label="V_m")
     ax.plot(np.linspace(800, 1000, 200), SS_voltage*np.ones(200), linewidth=1.5, label="V_SS: %.3f mV"%SS_voltage)
@@ -786,6 +787,7 @@ def plot_avg_EPS(t, EPSPs, EPSP, EPSCs, EPSC, mean_weight, save_name):
     ax.legend()
     
     ax2 = fig.add_subplot(2, 1, 2)
+    sns.despine()
     ax2.plot(t, np.mean(EPSCs, axis=0), "b-", label="mean of %i random weights"%EPSCs.shape[0])
     ax2.plot(t, EPSC, "g-", label="mean of all weights (%f nS)"%mean_weight)
     ax2.set_title("average EPSC")
@@ -816,6 +818,7 @@ def plot_EPS_dist(peak_EPSPs, peak_EPSCs, save_name):
     ax.set_yticks([])
     
     ax2 = fig.add_subplot(2, 1, 2)
+    sns.despine()
     ax2.violinplot(peak_EPSCs, vert=False, showmeans=True, showextrema=False, showmedians=False,
                    points=peak_EPSCs.shape[0], bw_method="silverman")
     ax2.set_title("%i random EPSCs (mean: %f pA)"%(peak_EPSCs.shape[0], np.mean(peak_EPSCs)))
@@ -850,7 +853,8 @@ def plot_learned_EPSPs(delta_ts, EPSPs, save_name):
         ax.set_ylabel("EPSP (mV)")
         if i >= 4:
             ax.set_xlabel("Time (ms)")
-        
+    
+    sns.despine()
     fig.tight_layout()
     fig_name = os.path.join(fig_dir, "%s.png"%save_name)
     fig.savefig(fig_name)
@@ -868,6 +872,7 @@ def plot_compare_STDP_to_orig(EPSP_changes, orig_data, save_name, orig_exp_fit=N
     
     fig = plt.figure(figsize=(10, 8))    
     ax = fig.add_subplot(1, 1, 1)
+    sns.despine(right=False)
     
     # plot original data
     ax.plot(orig_data["time(ms)"], orig_data["mean(%)"], "ko", markersize=6, label="original (in vitro) data")
@@ -915,8 +920,9 @@ def plot_STDP2(STDP_params, sim_exp_fit, mode, save_name):
     delta_w_fitted = np.where(delta_t>0, sim_exp_fit["Ap"]*np.exp(-delta_t/sim_exp_fit["taup"]), None)
 
     fig = plt.figure(figsize=(10, 8))
-
     ax = fig.add_subplot(1, 1, 1)
+    sns.despine(right=False)
+    
     ax.plot(delta_t, delta_w_rule, "b-", linewidth=2, label="STDP rule taup:%s(ms), Ap:%s"%(STDP_params["taup"], STDP_params["Ap"]))
     ax.axhline(0, ls="-", c="k")  
     ax.set_title("STDP")
