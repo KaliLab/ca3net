@@ -129,8 +129,8 @@ def analyse_results(SM_BC, RM_BC, StateM_BC):
 
 if __name__ == "__main__":
 
-    w_BC_E = 4.0
-    w_BC_I = 7.0
+    w_BC_E = 3.75
+    w_BC_I = 7.5
     exc_rates = [1.75, 2., 2.25, 2.5, 2.75]
 
     for exc_rate in exc_rates:   

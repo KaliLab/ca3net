@@ -12,7 +12,7 @@ import random as pyrandom
 from brian2 import *
 set_device("cpp_standalone")  # speed up the simulation with generated C++ code
 import matplotlib.pyplot as plt
-from plots import *
+from plots import plot_STDP_rule, plot_wmx, plot_wmx_avg, plot_w_distr, save_selected_w, plot_weights
 
 
 base_path = os.path.sep.join(os.path.abspath("__file__").split(os.path.sep)[:-2])
@@ -117,15 +117,15 @@ if __name__ == "__main__":
         Ap = 0.01
         Am = -Ap
         wmax = 4e-8  # S
-        scale_factor = 1.6
+        scale_factor = 2.65
     elif STDP_mode == "sym":
         taup = taum = 62.5 * ms
         Ap = Am = 4e-3
         wmax = 2e-8  # S
-        scale_factor = 0.8
+        scale_factor = 1.365
     w_init = 1e-10  # S
     Ap *= wmax; Am *= wmax  # needed to reproduce Brian1 results
-          
+
     npzf_name = os.path.join(base_path, "files", f_in)
     spiking_neurons, spike_times = load_spike_trains(npzf_name)
     

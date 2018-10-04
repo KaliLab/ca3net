@@ -32,6 +32,49 @@ def load_wmx(pklf_name):
         wmx_PC_E = pickle.load(f)
         
     return wmx_PC_E
+    
+    
+def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC):
+    """
+    Duplicated (simpler) version of `../spw_network.py/analyse_results()`
+    :param SM_PC, SM_BC, RM_PC, RM_BC: Brian2 spike and rate monitors of PC and BC populations
+    """
+
+    if SM_PC.num_spikes > 0 and SM_BC.num_spikes > 0:  # check if there is any activity
+        
+            spike_times_PC, spiking_neurons_PC, rate_PC, ISI_hist_PC, bin_edges_PC = preprocess_monitors(SM_PC, RM_PC)
+            spike_times_BC, spiking_neurons_BC, rate_BC = preprocess_monitors(SM_BC, RM_BC, calc_ISI=False)
+            
+            replay, avg_replay_interval = replay_circular(ISI_hist_PC[3:16])  # bins from 150 to 850 (range of interest)
+            
+            mean_rate_PC, rate_ac_PC, max_ac_PC, t_max_ac_PC, f_PC, Pxx_PC = analyse_rate(rate_PC, fs=1000.0, slice_idx=[], TFR=False)
+            mean_rate_BC, rate_ac_BC, max_ac_BC, t_max_ac_BC, f_BC, Pxx_BC = analyse_rate(rate_BC, fs=1000.0, slice_idx=[], TFR=False)
+                    
+            max_ac_ripple_PC, t_max_ac_ripple_PC, avg_ripple_freq_PC, ripple_power_PC = ripple(rate_ac_PC, f_PC, Pxx_PC, slice_idx=[])
+            max_ac_ripple_BC, t_max_ac_ripple_BC, avg_ripple_freq_BC, ripple_power_BC = ripple(rate_ac_BC, f_BC, Pxx_BC, slice_idx=[])
+            avg_gamma_freq_PC, gamma_power_PC = gamma(f_PC, Pxx_PC, slice_idx=[])       
+            avg_gamma_freq_BC, gamma_power_BC = gamma(f_BC, Pxx_BC, slice_idx=[])
+        
+            if not np.isnan(replay):
+                print "Replay detected!"
+            else:
+                print "No replay... :("
+            print "Mean excitatory rate: %.3f"%mean_rate_PC
+            print "Mean inhibitory rate: %.3f"%mean_rate_BC
+            print "Average exc. ripple freq: %.3f"%avg_ripple_freq_PC
+            print "Exc. ripple power: %.3f"%ripple_power_PC
+            print "Average inh. ripple freq: %.3f"%avg_ripple_freq_BC
+            print "Inh. ripple power: %.3f"%ripple_power_BC
+            
+            plot_raster(spike_times_PC, spiking_neurons_PC, rate_PC, [ISI_hist_PC, bin_edges_PC], False, "blue", multiplier_=1)
+            plot_PSD(rate_PC, rate_ac_PC, f_PC, Pxx_PC, "PC_population", "blue", multiplier_=1)
+            plot_PSD(rate_BC, rate_ac_BC, f_BC, Pxx_BC, "BC_population", "green", multiplier_=1)
+            plot_zoomed(spike_times_PC, spiking_neurons_PC, rate_PC, "PC_population", "blue", multiplier_=1)
+            plot_zoomed(spike_times_BC, spiking_neurons_BC, rate_BC, "BC_population", "green", multiplier_=1, PC_pop=False)
+            
+    else:
+    
+        print "No activity !"
 
 
 if __name__ == "__main__":
@@ -45,21 +88,21 @@ if __name__ == "__main__":
     f_in = "wmx_%s_%.1f.pkl"%(STDP_mode, place_cell_ratio)
         
     # parameters to be fitted as a list of: (name, lower bound, upper bound)
-    optconf = [("w_PC_I_", 0.1, 1.0),
-               ("w_BC_E_", 3.0, 5.5),
-               ("w_BC_I_", 6.0, 8.0),
-               ("wmx_mult_", 0.2, 3.0),
-               ("w_PC_MF_", 20., 45.),
+    optconf = [("w_PC_I_", 0.1, 0.3),
+               ("w_BC_E_", 3.5, 4.5),
+               ("w_BC_I_", 6.5, 8.0),
+               ("wmx_mult_", 0.8, 3.0),
+               ("w_PC_MF_", 20., 35.),
                ("rate_MF_", 10., 25.)]
                # the order matters! if you want to add more parameters - update `run_sim.py` too
     pnames = [name for name, _, _ in optconf]
     
-    offspring_size = 25
-    max_ngen = 20
+    offspring_size = 35
+    max_ngen = 7
     
     
     pklf_name = os.path.join(base_path, "files", f_in)
-    wmx_PC_E = load_wmx(pklf_name)
+    wmx_PC_E = load_wmx(pklf_name) * 1e9  # *1e9 nS conversion
 
     # Create multiprocessing pool for parallel evaluation of fitness function
     pool = mp.Pool(processes=mp.cpu_count())
@@ -71,7 +114,7 @@ if __name__ == "__main__":
     
     print "Started running %i simulations on %i cores..."%(offspring_size*max_ngen ,mp.cpu_count())                                   
     pop, hof, log, hist = opt.run(max_ngen=max_ngen,
-                                  cp_filename=os.path.join(base_path, "scripts", "optimization", "checkpoints", "checkpoint_%.1f_%s_1.pkl"%(place_cell_ratio, STDP_mode)))
+                                  cp_filename=os.path.join(base_path, "scripts", "optimization", "checkpoints", "checkpoint_%.1f_%s_2.pkl"%(place_cell_ratio, STDP_mode)))
     del pool; del opt
     
     # ====================================== end of optimization ======================================
@@ -87,42 +130,9 @@ if __name__ == "__main__":
 
     # rerun with best parameters and save figures
     SM_PC, SM_BC, RM_PC, RM_BC = evaluator.generate_model(best, verbose=True)
-    del evaluator
+    analyse_results(SM_PC, SM_BC, RM_PC, RM_BC)
 
-    if SM_PC.num_spikes > 0 and SM_BC.num_spikes > 0:  # check if there is any activity
-    
-        spike_times_PC, spiking_neurons_PC, rate_PC, ISI_hist_PC, bin_edges_PC = preprocess_monitors(SM_PC, RM_PC)
-        spike_times_BC, spiking_neurons_BC, rate_BC = preprocess_monitors(SM_BC, RM_BC, calc_ISI=False)
-        
-        replay, avg_replay_interval = replay_circular(ISI_hist_PC[3:16])  # bins from 150 to 850 (range of interest)
-        
-        mean_rate_PC, rate_ac_PC, max_ac_PC, t_max_ac_PC, f_PC, Pxx_PC = analyse_rate(rate_PC, fs=1000.0, slice_idx=[], TFR=False)
-        mean_rate_BC, rate_ac_BC, max_ac_BC, t_max_ac_BC, f_BC, Pxx_BC = analyse_rate(rate_BC, fs=1000.0, slice_idx=[], TFR=False)
-                
-        max_ac_ripple_PC, t_max_ac_ripple_PC, avg_ripple_freq_PC, ripple_power_PC = ripple(rate_ac_PC, f_PC, Pxx_PC, slice_idx=[])
-        max_ac_ripple_BC, t_max_ac_ripple_BC, avg_ripple_freq_BC, ripple_power_BC = ripple(rate_ac_BC, f_BC, Pxx_BC, slice_idx=[])
-        avg_gamma_freq_PC, gamma_power_PC = gamma(f_PC, Pxx_PC, slice_idx=[])       
-        avg_gamma_freq_BC, gamma_power_BC = gamma(f_BC, Pxx_BC, slice_idx=[])
-    
-        if not np.isnan(replay):
-            print "Replay detected!"
-        else:
-            print "No replay... :("
-        print "Mean excitatory rate: %.3f"%mean_rate_PC
-        print "Mean inhibitory rate: %.3f"%mean_rate_BC
-        print "Average exc. ripple freq: %.3f"%avg_ripple_freq_PC
-        print "Exc. ripple power: %.3f"%ripple_power_PC
-        print "Average inh. ripple freq: %.3f"%avg_ripple_freq_BC
-        print "Inh. ripple power: %.3f"%ripple_power_BC
-        
-        plot_raster(spike_times_PC, spiking_neurons_PC, rate_PC, [ISI_hist_PC, bin_edges_PC], False, "blue", multiplier_=1)
-        plot_PSD(rate_PC, rate_ac_PC, f_PC, Pxx_PC, "PC_population", "blue", multiplier_=1)
-        plot_PSD(rate_BC, rate_ac_BC, f_BC, Pxx_BC, "BC_population", "green", multiplier_=1)
-        plot_zoomed(spike_times_PC, spiking_neurons_PC, rate_PC, "PC_population", "blue", multiplier_=1)
-        plot_zoomed(spike_times_BC, spiking_neurons_BC, rate_BC, "BC_population", "green", multiplier_=1, PC_pop=False)
-        
-    else:
-    
-        print "No activity !"
+
+
 
 

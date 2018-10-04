@@ -51,7 +51,7 @@ if __name__ == "__main__":
         print "multiplier: %.2f"%multiplier
         dir_name = os.path.join(base_path, "figures", "%.2f_replay_det_%s_%.1f"%(multiplier, STDP_mode, place_cell_ratio)) if linear else None
         
-        SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC = run_simulation(wmx_PC_E*multiplier, STDP_mode, detailed=detailed,
+        SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC = run_simulation(wmx_PC_E*multiplier, detailed=detailed,
                                                                                      LFP=analyse_LFP, que=que, save_spikes=save_spikes, verbose=verbose)
         results[i, :] = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier=multiplier, linear=linear, pklf_name=PF_pklf_name, dir_name=dir_name,
                                         detailed=detailed, selection=selection, StateM_PC=StateM_PC, StateM_BC=StateM_BC,

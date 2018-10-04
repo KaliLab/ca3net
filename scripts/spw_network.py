@@ -59,8 +59,13 @@ delay_BC_I = 0.6 * ms  # Bartos 2002
 Erev_E = 0.0 * mV
 Erev_I = -70.0 * mV
 
-# mossy fiber input
-rate_MF = 16.5 * Hz
+# synaptic weights (optimized in /optimization/optimize_network.py by BluePyOpt)
+w_PC_I = 0.17  # nS
+w_BC_E = 3.75
+w_BC_I = 7.5
+w_PC_MF = 25.0
+
+rate_MF = 15.0 * Hz  # mossy fiber input freq
 
 z = 1 * nS
 # parameters for PCs (optimized by Bence)
@@ -122,11 +127,10 @@ def load_wmx(pklf_name):
     return wmx_PC_E
 
 
-def run_simulation(wmx_PC_E, STDP_mode, detailed, LFP, que, save_spikes, verbose=True):
+def run_simulation(wmx_PC_E, detailed, LFP, que, save_spikes, verbose=True):
     """
     Sets up the network and runs simulation
     :param wmx_PC_E: np.array representing the recurrent excitatory synaptic weight matrix
-    :param STDP_mode: symmetric or asymmetric weight matrix flag (used for synapse parameters)
     :param detailed: bool flag for useage of multi state monitor (for membrane pot and inh. and exc. inputs of some singe cells)
     :param LFP: similar to `detailed` but more PCs are recorded
     :param que: if True it adds an other Brian2 `SpikeGeneratorGroup` to stimulate a subpop in the beginning (qued replay)
@@ -137,17 +141,6 @@ def run_simulation(wmx_PC_E, STDP_mode, detailed, LFP, que, save_spikes, verbose
 
     np.random.seed(12345)
     pyrandom.seed(12345)
-    
-    # synaptic weights
-    w_BC_E = 4.5
-    if STDP_mode == "asym":
-        w_PC_I = 0.22       
-        w_BC_I = 7.15
-        w_PC_MF = 39.0
-    elif STDP_mode == "sym":
-        w_PC_I = 0.23
-        w_BC_I = 6.4
-        w_PC_MF = 37.0
 
     PCs = NeuronGroup(nPCs, model=eqs_PC, threshold="vm>spike_th_PC",
                       reset="vm=Vreset_PC; w+=b_PC", refractory=tref_PC, method="exponential_euler")
@@ -215,7 +208,7 @@ def run_simulation(wmx_PC_E, STDP_mode, detailed, LFP, que, save_spikes, verbose
         spike_times = np.array(SM_PC.t_) * 1000.  # *1000 ms conversion
         spiking_neurons = np.array(SM_PC.i_)
         rate = np.array(RM_PC.rate_).reshape(-1, 10).mean(axis=1)
-        f_name = os.path.join(base_path, "files", "sim_spikes_%s.npz"%STDP_mode)
+        f_name = os.path.join(base_path, "files", "sim_spikes.npz")
         np.savez(f_name, spike_times=spike_times, spiking_neurons=spiking_neurons, rate=rate)
     
     if detailed:
@@ -352,9 +345,9 @@ if __name__ == "__main__":
         analyse_LFP = False
         
     pklf_name = os.path.join(base_path, "files", f_in)
-    wmx_PC_E = load_wmx(pklf_name) * 1e9  # *1e9 nS conversion
+    wmx_PC_E = load_wmx(pklf_name) * 1e9 # *1e9 nS conversion
         
-    SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC = run_simulation(wmx_PC_E, STDP_mode, detailed=detailed,
+    SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC = run_simulation(wmx_PC_E, detailed=detailed,
                                                                                  LFP=analyse_LFP, que=que, save_spikes=save_spikes, verbose=verbose)
     _ = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier=1, linear=linear, pklf_name=PF_pklf_name, dir_name=dir_name,
                         detailed=detailed, selection=selection, StateM_PC=StateM_PC, StateM_BC=StateM_BC,
