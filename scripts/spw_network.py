@@ -9,9 +9,10 @@ import os, shutil, sys, pickle
 import numpy as np
 import random as pyrandom
 from brian2 import *
+prefs.codegen.target = "numpy"
 import matplotlib.pyplot as plt
-from detect_oscillations import *
-from plots import *
+from detect_oscillations import preprocess_monitors, replay_circular, slice_high_activity, replay_linear, analyse_rate, ripple, gamma, analyse_estimated_LFP
+from plots import plot_raster, plot_posterior_trajectory, plot_PSD, plot_TFR, plot_zoomed, plot_detailed, plot_LFP
 
 
 base_path = os.path.sep.join(os.path.abspath("__file__").split(os.path.sep)[:-2])
@@ -37,11 +38,16 @@ decay_PC_I = 3.3 * ms  # Bartos 2002
 decay_BC_E = 4.1 * ms  # Lee 2014 (data from CA1)
 decay_BC_I = 1.2 * ms  # Bartos 2002
 # Normalization factors (normalize the peak of the PSC curve to 1)
-norm_PC_E = (decay_PC_E / rise_PC_E) ** (rise_PC_E / (decay_PC_E - rise_PC_E))
-norm_PC_MF = (decay_PC_MF / rise_PC_MF) ** (rise_PC_MF / (decay_PC_MF - rise_PC_MF))
-norm_PC_I = (decay_PC_I / rise_PC_I) ** (rise_PC_I / (decay_PC_I - rise_PC_I))
-norm_BC_E = (decay_BC_E / rise_BC_E) ** (rise_BC_E / (decay_BC_E - rise_BC_E))
-norm_BC_I = (decay_BC_I / rise_BC_I) ** (rise_BC_I / (decay_BC_I - rise_BC_I))
+tp = (decay_PC_E * rise_PC_E)/(decay_PC_E - rise_PC_E) * np.log(decay_PC_E/rise_PC_E)  # time to peak
+norm_PC_E = 1.0 / (np.exp(-tp/decay_PC_E) - np.exp(-tp/rise_PC_E))
+tp = (decay_PC_MF * rise_PC_MF)/(decay_PC_MF - rise_PC_MF) * np.log(decay_PC_MF/rise_PC_MF)
+norm_PC_MF = 1.0 / (np.exp(-tp/decay_PC_E) - np.exp(-tp/rise_PC_E))
+tp = (decay_PC_I * rise_PC_I)/(decay_PC_I - rise_PC_I) * np.log(decay_PC_I/rise_PC_I)
+norm_PC_I = 1.0 / (np.exp(-tp/decay_PC_I) - np.exp(-tp/rise_PC_I))
+tp = (decay_BC_E * rise_BC_E)/(decay_BC_E - rise_BC_E) * np.log(decay_BC_E/rise_BC_E)
+norm_BC_E = 1.0 / (np.exp(-tp/decay_BC_E) - np.exp(-tp/rise_BC_E))
+tp = (decay_BC_I * rise_BC_I)/(decay_BC_I - rise_BC_I) * np.log(decay_BC_I/rise_BC_I)
+norm_BC_I = 1.0 / (np.exp(-tp/decay_BC_I) - np.exp(-tp/rise_BC_I))
 
 # synaptic delays:
 delay_PC_E = 2.2 * ms  # Guzman 2016
@@ -86,19 +92,19 @@ spike_th_BC = theta_BC + 10 * delta_T_BC
 eqs_PC = """
 dvm/dt = (-g_leak_PC*(vm-Vrest_PC) + g_leak_PC*delta_T_PC*exp((vm- theta_PC)/delta_T_PC) - w - ((g_ampa+g_ampaMF)*z*(vm-Erev_E) + g_gaba*z*(vm-Erev_I)))/Cm_PC : volt (unless refractory)
 dw/dt = (a_PC*(vm- Vrest_PC )-w)/tau_w_PC : amp
-dg_ampa/dt = (norm_PC_E * x_ampa - g_ampa) / rise_PC_E : 1
+dg_ampa/dt = (x_ampa - g_ampa) / rise_PC_E : 1
 dx_ampa/dt = -x_ampa / decay_PC_E : 1
-dg_ampaMF/dt = (norm_PC_MF * x_ampaMF - g_ampaMF) / rise_PC_MF : 1
+dg_ampaMF/dt = (x_ampaMF - g_ampaMF) / rise_PC_MF : 1
 dx_ampaMF/dt = -x_ampaMF / decay_PC_MF : 1
-dg_gaba/dt = (norm_PC_I * x_gaba - g_gaba) / rise_PC_I : 1
+dg_gaba/dt = (x_gaba - g_gaba) / rise_PC_I : 1
 dx_gaba/dt = -x_gaba/decay_PC_I : 1
 """
 
 eqs_BC = """
 dvm/dt = (-g_leak_BC*(vm-Vrest_BC) + g_leak_BC*delta_T_BC*exp((vm- theta_BC)/delta_T_BC) - (g_ampa*z*(vm-Erev_E) + g_gaba*z*(vm-Erev_I)))/Cm_BC : volt (unless refractory)
-dg_ampa/dt = (norm_BC_E * x_ampa - g_ampa) / rise_BC_E : 1
+dg_ampa/dt = (x_ampa - g_ampa) / rise_BC_E : 1
 dx_ampa/dt = -x_ampa/decay_BC_E : 1
-dg_gaba/dt = (norm_BC_I * x_gaba - g_gaba) / rise_BC_I : 1
+dg_gaba/dt = (x_gaba - g_gaba) / rise_BC_I : 1
 dx_gaba/dt = -x_gaba/decay_BC_I : 1
 """
 
@@ -134,7 +140,7 @@ def run_simulation(wmx_PC_E, STDP_mode, detailed, LFP, que, save_spikes, verbose
     
     # synaptic weights
     w_BC_E = 4.5
-    if STDP_mode == "asym":      
+    if STDP_mode == "asym":
         w_PC_I = 0.22       
         w_BC_I = 7.15
         w_PC_MF = 39.0
@@ -144,15 +150,15 @@ def run_simulation(wmx_PC_E, STDP_mode, detailed, LFP, que, save_spikes, verbose
         w_PC_MF = 37.0
 
     PCs = NeuronGroup(nPCs, model=eqs_PC, threshold="vm>spike_th_PC",
-                     reset="vm=Vreset_PC; w+=b_PC", refractory=tref_PC, method="exponential_euler")
+                      reset="vm=Vreset_PC; w+=b_PC", refractory=tref_PC, method="exponential_euler")
     PCs.vm = Vrest_PC; PCs.g_ampa = 0.0; PCs.g_ampaMF = 0.0; PCs.g_gaba = 0.0
                      
     BCs = NeuronGroup(nBCs, model=eqs_BC, threshold="vm>spike_th_BC",
-                     reset="vm=Vreset_BC", refractory=tref_BC, method="exponential_euler")    
+                      reset="vm=Vreset_BC", refractory=tref_BC, method="exponential_euler")    
     BCs.vm  = Vrest_BC; BCs.g_ampa = 0.0; BCs.g_gaba = 0.0
 
     MF = PoissonGroup(nPCs, rate_MF)
-    C_PC_MF = Synapses(MF, PCs, on_pre="x_ampaMF+=w_PC_MF")
+    C_PC_MF = Synapses(MF, PCs, on_pre="x_ampaMF+=norm_PC_MF*w_PC_MF")
     C_PC_MF.connect(j='i')
     
     if que:
@@ -169,28 +175,24 @@ def run_simulation(wmx_PC_E, STDP_mode, detailed, LFP, que, save_spikes, verbose
         que_input = SpikeGeneratorGroup(100, spiking_neurons, spike_times*second)
     
         # connects at the end of PC pop (...end of PFs in linear case)
-        C_PC_que = Synapses(que_input, PCs, on_pre="x_ampaMF+=w_PC_MF")
+        C_PC_que = Synapses(que_input, PCs, on_pre="x_ampaMF+=norm_PC_MF*w_PC_MF")
         C_PC_que.connect(i=np.arange(0, 100), j=np.arange(7000, 7100))
     
     # weight matrix used here
-    C_PC_E = Synapses(PCs, PCs, 'w_exc:1', on_pre='x_ampa+=w_exc')
+    C_PC_E = Synapses(PCs, PCs, "w_exc:1", on_pre="x_ampa+=norm_PC_E*w_exc", delay=delay_PC_E)
     nonzero_weights = np.nonzero(wmx_PC_E)    
     C_PC_E.connect(i=nonzero_weights[0], j=nonzero_weights[1])
     C_PC_E.w_exc = wmx_PC_E[nonzero_weights].flatten()
-    C_PC_E.delay = delay_PC_E
     del wmx_PC_E
 
-    C_PC_I = Synapses(PCs, BCs, on_pre='x_ampa+=w_BC_E')
-    C_PC_I.connect(p=connection_prob_PC)
-    C_PC_I.delay = delay_BC_E
+    C_PC_I = Synapses(BCs, PCs, on_pre="x_gaba+=norm_PC_I*w_PC_I", delay=delay_PC_I)
+    C_PC_I.connect(p=connection_prob_BC)
 
-    C_BC_E = Synapses(BCs, PCs, on_pre='x_gaba+=w_PC_I')
-    C_BC_E.connect(p=connection_prob_BC)
-    C_BC_E.delay = delay_PC_I
+    C_BC_E = Synapses(PCs, BCs, on_pre="x_ampa+=norm_BC_E*w_BC_E", delay=delay_BC_E)
+    C_BC_E.connect(p=connection_prob_PC)
 
-    C_BC_I = Synapses(BCs, BCs, on_pre='x_gaba+=w_BC_I')
+    C_BC_I = Synapses(BCs, BCs, on_pre="x_gaba+=norm_BC_I*w_BC_I", delay=delay_BC_I)
     C_BC_I.connect(p=connection_prob_BC)
-    C_BC_I.delay = delay_BC_I
 
     SM_PC = SpikeMonitor(PCs)
     SM_BC = SpikeMonitor(BCs)
@@ -242,14 +244,14 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier, linear, pklf_name, d
         spike_times_PC, spiking_neurons_PC, rate_PC, ISI_hist_PC, bin_edges_PC = preprocess_monitors(SM_PC, RM_PC)
         spike_times_BC, spiking_neurons_BC, rate_BC = preprocess_monitors(SM_BC, RM_BC, calc_ISI=False)
         
-        if linear:
+        if not linear:
+            slice_idx = []
+            replay, _ = replay_circular(ISI_hist_PC[3:16])  # bins from 150 to 850 (range of interest)
+        else:
             if verbose:
                 print "Detecting replay..."
             slice_idx = slice_high_activity(rate_PC)
-            replay, replay_results = replay_linear(spike_times_PC, spiking_neurons_PC, slice_idx, pklf_name, N=20)
-        else:
-            slice_idx = []
-            replay = replay_circular(ISI_hist_PC[3:16])  # bins from 150 to 850 (range of interest)
+            replay, replay_results = replay_linear(spike_times_PC, spiking_neurons_PC, slice_idx, pklf_name, N=20)            
         
         if TFR:
             mean_rate_PC, rate_ac_PC, max_ac_PC, t_max_ac_PC, f_PC, Pxx_PC, coefs_PC, freqs_PC = analyse_rate(rate_PC, 1000., slice_idx, TFR=True)
@@ -278,7 +280,9 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier, linear, pklf_name, d
             print "Average inh. ripple freq: %.3f"%avg_ripple_freq_BC
             print "Inh. ripple power: %.3f"%ripple_power_BC
 
-        if linear:
+        if not linear:
+            plot_raster(spike_times_PC, spiking_neurons_PC, rate_PC, [ISI_hist_PC, bin_edges_PC], False, "blue", multiplier_=multiplier)
+        else:
             plot_raster(spike_times_PC, spiking_neurons_PC, rate_PC, [ISI_hist_PC, bin_edges_PC], True, "blue", multiplier_=multiplier)
             if slice_idx:
                 if os.path.isdir(dir_name):
@@ -289,9 +293,7 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, multiplier, linear, pklf_name, d
                 for bounds, tmp in replay_results.iteritems():
                     fig_name = os.path.join(dir_name, "%i-%i_replay.png"%(bounds[0], bounds[1]))
                     plot_posterior_trajectory(tmp["X_posterior"], tmp["fitted_path"], tmp["R"], fig_name)
-        else:
-            plot_raster(spike_times_PC, spiking_neurons_PC, rate_PC, [ISI_hist_PC, bin_edges_PC], False, "blue", multiplier_=multiplier)
-        
+                   
         plot_PSD(rate_PC, rate_ac_PC, f_PC, Pxx_PC, "PC_population", "blue", multiplier_=multiplier)
         plot_PSD(rate_BC, rate_ac_BC, f_BC, Pxx_BC, "BC_population", "green", multiplier_=multiplier)
         if TFR:

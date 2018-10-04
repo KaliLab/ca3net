@@ -9,7 +9,7 @@ import os
 import numpy as np
 import random as pyrandom
 from brian2 import *
-prefs.codegen.target = "cython"  # weave is not multiprocess-safe!
+prefs.codegen.target = "numpy"#cython  # weave is not multiprocess-safe!
 
 
 # population size
@@ -33,16 +33,16 @@ decay_PC_I = 3.3 * ms  # Bartos 2002
 decay_BC_E = 4.1 * ms  # Lee 2014 (data from CA1)
 decay_BC_I = 1.2 * ms  # Bartos 2002
 # Normalization factors (normalize the peak of the PSC curve to 1)
-tmp = (decay_PC_E * rise_PC_E)/(decay_PC_E - rise_PC_E) * np.log(decay_PC_E/rise_PC_E)
-norm_PC_E = 1.0 / (np.exp(-tmp/decay_PC_E) - np.exp(-tmp/rise_PC_E))
-tmp = (decay_PC_MF * rise_PC_MF)/(decay_PC_MF - rise_PC_MF) * np.log(decay_PC_MF/rise_PC_MF)
-norm_PC_MF = 1.0 / (np.exp(-tmp/decay_PC_E) - np.exp(-tmp/rise_PC_E))
-tmp = (decay_PC_I * rise_PC_I)/(decay_PC_I - rise_PC_I) * np.log(decay_PC_I/rise_PC_I)
-norm_PC_I = 1.0 / (np.exp(-tmp/decay_PC_I) - np.exp(-tmp/rise_PC_I))
-tmp = (decay_BC_E * rise_BC_E)/(decay_BC_E - rise_BC_E) * np.log(decay_BC_E/rise_BC_E)
-norm_BC_E = 1.0 / (np.exp(-tmp/decay_BC_E) - np.exp(-tmp/rise_BC_E))
-tmp = (decay_BC_I * rise_BC_I)/(decay_BC_I - rise_BC_I) * np.log(decay_BC_I/rise_BC_I)
-norm_BC_I = 1.0 / (np.exp(-tmp/decay_BC_I) - np.exp(-tmp/rise_BC_I))
+tp = (decay_PC_E * rise_PC_E)/(decay_PC_E - rise_PC_E) * np.log(decay_PC_E/rise_PC_E)  # time to peak
+norm_PC_E = 1.0 / (np.exp(-tp/decay_PC_E) - np.exp(-tp/rise_PC_E))
+tp = (decay_PC_MF * rise_PC_MF)/(decay_PC_MF - rise_PC_MF) * np.log(decay_PC_MF/rise_PC_MF)
+norm_PC_MF = 1.0 / (np.exp(-tp/decay_PC_E) - np.exp(-tp/rise_PC_E))
+tp = (decay_PC_I * rise_PC_I)/(decay_PC_I - rise_PC_I) * np.log(decay_PC_I/rise_PC_I)
+norm_PC_I = 1.0 / (np.exp(-tp/decay_PC_I) - np.exp(-tp/rise_PC_I))
+tp = (decay_BC_E * rise_BC_E)/(decay_BC_E - rise_BC_E) * np.log(decay_BC_E/rise_BC_E)
+norm_BC_E = 1.0 / (np.exp(-tp/decay_BC_E) - np.exp(-tp/rise_BC_E))
+tp = (decay_BC_I * rise_BC_I)/(decay_BC_I - rise_BC_I) * np.log(decay_BC_I/rise_BC_I)
+norm_BC_I = 1.0 / (np.exp(-tp/decay_BC_I) - np.exp(-tp/rise_BC_I))
 
 # synaptic delays:
 delay_PC_E = 2.2 * ms  # Guzman 2016
@@ -143,19 +143,19 @@ def run_simulation(wmx_PC_E, w_PC_I_, w_BC_E_, w_BC_I_, wmx_mult_, w_PC_MF_, rat
     C_PC_MF.connect(j='i')
     
     # weight matrix used here
-    C_PC_E = Synapses(PCs, PCs, 'w_exc:1', on_pre='x_ampa+=norm_PC_E*w_exc', delay=delay_PC_E)
+    C_PC_E = Synapses(PCs, PCs, "w_exc:1", on_pre="x_ampa+=norm_PC_E*w_exc", delay=delay_PC_E)
     nonzero_weights = np.nonzero(wmx_PC_E)    
     C_PC_E.connect(i=nonzero_weights[0], j=nonzero_weights[1])
     C_PC_E.w_exc = wmx_PC_E[nonzero_weights].flatten()
     del wmx_PC_E
 
-    C_PC_I = Synapses(BCs, PCs, on_pre='x_gaba+=norm_PC_I*w_PC_I', delay=delay_PC_I)
+    C_PC_I = Synapses(BCs, PCs, on_pre="x_gaba+=norm_PC_I*w_PC_I", delay=delay_PC_I)
     C_PC_I.connect(p=connection_prob_BC)
 
-    C_BC_E = Synapses(PCs, BCs, on_pre='x_ampa+=norm_BC_E*w_BC_E', delay=delay_BC_E)
+    C_BC_E = Synapses(PCs, BCs, on_pre="x_ampa+=norm_BC_E*w_BC_E", delay=delay_BC_E)
     C_BC_E.connect(p=connection_prob_PC)
 
-    C_BC_I = Synapses(BCs, BCs, on_pre='x_gaba+=norm_BC_I*w_BC_I', delay=delay_BC_I)
+    C_BC_I = Synapses(BCs, BCs, on_pre="x_gaba+=norm_BC_I*w_BC_I", delay=delay_BC_I)
     C_BC_I.connect(p=connection_prob_BC)
 
     SM_PC = SpikeMonitor(PCs)

@@ -20,8 +20,8 @@ from plots import plot_avg_EPS, plot_EPS_dist
 # synaptic parameters:
 rise_PC_E = 1.3 * ms  # Guzman 2016 (only from Fig.1 H - 20-80%)
 decay_PC_E = 9.5 * ms  # Guzman 2016 ("needed for temporal summation of EPSPs") 
-tmp = (decay_PC_E * rise_PC_E)/(decay_PC_E - rise_PC_E) * np.log(decay_PC_E/rise_PC_E)
-norm_PC_E = 1.0 / (np.exp(-tmp/decay_PC_E) - np.exp(-tmp/rise_PC_E))
+tp = (decay_PC_E * rise_PC_E)/(decay_PC_E - rise_PC_E) * np.log(decay_PC_E/rise_PC_E)  # time to peak
+norm_PC_E = 1.0 / (np.exp(-tp/decay_PC_E) - np.exp(-tp/rise_PC_E))
 delay_PC_E = 2.2 * ms  # Guzman 2016
 Erev_E = 0.0 * mV
 

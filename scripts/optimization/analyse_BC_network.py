@@ -33,10 +33,10 @@ rise_BC_I = 0.25 * ms  # Bartos 2002 (20-80%)
 decay_BC_E = 4.1 * ms  # Lee 2014 (data from CA1)
 decay_BC_I = 1.2 * ms  # Bartos 2002
 # Normalization factors (normalize the peak of the PSC curve to 1)
-tmp = (decay_BC_E * rise_BC_E)/(decay_BC_E - rise_BC_E) * np.log(decay_BC_E/rise_BC_E)
-norm_BC_E = 1.0 / (np.exp(-tmp/decay_BC_E) - np.exp(-tmp/rise_BC_E))
-tmp = (decay_BC_I * rise_BC_I)/(decay_BC_I - rise_BC_I) * np.log(decay_BC_I/rise_BC_I)
-norm_BC_I = 1.0 / (np.exp(-tmp/decay_BC_I) - np.exp(-tmp/rise_BC_I))
+tp = (decay_BC_E * rise_BC_E)/(decay_BC_E - rise_BC_E) * np.log(decay_BC_E/rise_BC_E)  # time to peak
+norm_BC_E = 1.0 / (np.exp(-tp/decay_BC_E) - np.exp(-tp/rise_BC_E))
+tp = (decay_BC_I * rise_BC_I)/(decay_BC_I - rise_BC_I) * np.log(decay_BC_I/rise_BC_I)
+norm_BC_I = 1.0 / (np.exp(-tp/decay_BC_I) - np.exp(-tp/rise_BC_I))
 
 # synaptic delays:
 delay_BC_E = 0.9 * ms  # Geiger 1997 (data from DG)
