@@ -105,7 +105,7 @@ def _get_consecutive_sublists(list_):
     return cons_lists
 
 
-def slice_high_activity(rate, bin_=20, min_len=250.0, th=1.75):
+def slice_high_activity(rate, bin_=20, min_len=270.0, th=1.75):
     """
     Slices out high network activity - which will be candidates for replay detection
     :param rate: firing rate of the population
