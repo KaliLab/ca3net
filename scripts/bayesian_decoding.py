@@ -7,8 +7,8 @@ author: András Ecker last update: 09.2018
 """
 
 import os, copy, pickle
-import random
 import numpy as np
+import random as pyrandom
 from scipy.signal import convolve2d
 from scipy.special import factorial
 import multiprocessing as mp
@@ -78,7 +78,7 @@ def calc_posterior(bin_spike_counts, tuning_curves, delta_t):
     """
         
     delta_t *= 1e-3  # convert back to second
-    n_spatial_points = tuning_curves[random.sample(tuning_curves, 1)[0]].shape[0]
+    n_spatial_points = tuning_curves[pyrandom.sample(tuning_curves, 1)[0]].shape[0]
     
     X_posterior = np.zeros((n_spatial_points, len(bin_spike_counts)))  # dim:x*t
         
@@ -100,9 +100,9 @@ def calc_posterior(bin_spike_counts, tuning_curves, delta_t):
         likelihoods = np.power(expected_spikes, n_spikes)  # dim:x*i_spiking
         likelihoods = np.multiply(likelihoods, 1.0/n_factorials)
         likelihoods = np.multiply(likelihoods, np.exp(-expected_spikes))
-        likelihoods[np.where(likelihoods == 0.0)] = 1.0  # replace 0s from many 0 tau_is before prod
+        likelihoods[np.where(likelihoods < 1e-5)] = 1.0 # replace (almost) 0s from tau_is before prod for numerical stability
         likelihoods = np.prod(likelihoods, axis=1)  # dim:x*1
-        likelihoods[np.where(likelihoods == 1.0)] = 0.0  # replace rows with pure 0 tau_is
+        likelihoods[np.where(likelihoods == 1.0)] = 0.0 # replace rows with pure (almost) 0 tau_is
         
         # calculate posterior
         if np.sum(likelihoods) != 0.0:
