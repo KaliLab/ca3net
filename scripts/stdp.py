@@ -61,16 +61,16 @@ def learning(spiking_neurons, spike_times, taup, taum, Ap, Am, wmax, w_init):
     STDP = Synapses(PC, PC,
             """
             w : 1
-            dA_pre/dt = -A_pre/taup : 1 (event-driven)
-            dA_post/dt = -A_post/taum : 1 (event-driven)
+            dA_presyn/dt = -A_presyn/taup : 1 (event-driven)
+            dA_postsyn/dt = -A_postsyn/taum : 1 (event-driven)
             """,
             on_pre="""
-            A_pre += Ap
-            w = clip(w + A_post, 0, wmax)
+            A_presyn += Ap
+            w = clip(w + A_postsyn, 0, wmax)
             """,
             on_post="""
-            A_post += Am
-            w = clip(w + A_pre, 0, wmax)
+            A_postsyn += Am
+            w = clip(w + A_presyn, 0, wmax)
             """)
              
     STDP.connect(condition="i!=j", p=connection_prob_PC)
