@@ -52,12 +52,12 @@ def replay_circular(ISI_hist, th=0.7):
 
     max_ID = np.argmax(ISI_hist)
     bins_3 = ISI_hist[max_ID-1:max_ID+2] if 1 <= max_ID <= len(ISI_hist)-2 else []
-    
+
     replay = 1 if sum(int(i) for i in ISI_hist) * th < sum(int(i) for i in bins_3) else np.nan
-    
+
     # this part is only used for tuning...
     bin_means = np.linspace(175, 825, 14) # hard coded variable, which only works with rate binned into 20 bins in `preprocess_monitors()`...
-    #...and [3:16] passed in `spw_network.py/analyse_results()`    
+    #...and [3:16] passed in `spw_network.py/analyse_results()`
     tmp = ISI_hist[max_ID-1]*bin_means[max_ID-1] + ISI_hist[max_ID]*bin_means[max_ID] + ISI_hist[max_ID+1]*bin_means[max_ID+1]
     avg_replay_interval = tmp / (ISI_hist[max_ID-1] + ISI_hist[max_ID] + ISI_hist[max_ID+1])
 
@@ -71,7 +71,7 @@ def _avg_rate(rate, bin_, zoomed=False):
     :param bin_: bin size
     :param zoomed: bool for zoomed in plots
     """
-        
+
     t = np.linspace(0, len_sim, len(rate))
     t0 = 0 if not zoomed else 9900
     t1 = np.arange(t0, len_sim, bin_)
@@ -81,7 +81,7 @@ def _avg_rate(rate, bin_, zoomed=False):
         avg_ = np.mean(rate[np.where((t1_ <= t) & (t < t2_))])
         if avg_ != 0.:
             avg_rate[i] = avg_
-        
+
     return avg_rate
 
 
@@ -91,17 +91,17 @@ def _get_consecutive_sublists(list_):
     :param list_: input list to group
     :return cons_lists: list of lists with consecutive numbers
     """
-    
+
     # get upper bounds of consecutive sublists
     ubs = [x for x,y in zip(list_, list_[1:]) if y-x != 1]
-    
-    cons_lists = []; lb = 0    
+
+    cons_lists = []; lb = 0
     for ub in ubs:
         tmp = [x for x in list_[lb:] if x <= ub]
         cons_lists.append(tmp)
         lb += len(tmp)
     cons_lists.append([x for x in list_[lb:]])
-    
+
     return cons_lists
 
 
@@ -113,21 +113,21 @@ def slice_high_activity(rate, bin_=20, min_len=270.0, th=1.75):
     :param min_len: minimum length of continuous high activity (in ms)
     :param th: rate threshold (above which is 'high activity')
     """
-    
+
     idx = np.where(_avg_rate(rate, bin_) >= th)[0]
     high_act = _get_consecutive_sublists(idx.tolist())
     slice_idx = []
     for tmp in high_act:
         if len(tmp) >= np.floor(min_len/bin_):
             slice_idx.append((tmp[0]*bin_, (tmp[-1]+1)*bin_))
-            
+
     if not slice_idx:
         print "Sustained high network activity can't be detected (bin size:%i, min length:%.1f and threshold:%.2f)!"%(bin_, min_len, th)
-            
+
     return slice_idx
 
 
-def replay_linear(spike_times, spiking_neurons, slice_idx, pklf_name, N, delta_t=10, n_spatial_points=50):
+def replay_linear(spike_times, spiking_neurons, slice_idx, pklf_name, N, delta_t=10, t_incr=10, n_spatial_points=50):
     """
     Checks if there is sequence replay, using methods originating from Davison et al. 2009 (see more in `bayesian_decoding.py`)
     :param spike_times, spiking_neurons: see `preprocess_monitors()`
@@ -135,12 +135,13 @@ def replay_linear(spike_times, spiking_neurons, slice_idx, pklf_name, N, delta_t
     :param pklf_name: filename of saved place fields (used for tuning curves, see `bayesian_decoding/load_tuning_curves()`)
     :param N: number of shuffled versions tested (significance test, see `bayesian_decoding/test_significance()`)
     :param delta_t: length of time bins used for decoding (in ms)
-    :param n_spatial_points: number of spatial points to consider for decoding    
+    :param t_incr: increment of time bins (see `bayesian_decoding/extract_binspikecount()`)
+    :param n_spatial_points: number of spatial points to consider for decoding
     :return: significance: 1/nan for significant/non-significant replay detected
              results: dictinary of stored results
     """
-    
-    if slice_idx: 
+
+    if slice_idx:
         spatial_points = np.linspace(0, 2*np.pi, n_spatial_points)
         tuning_curves = load_tuning_curves(pklf_name, spatial_points)
 
@@ -148,21 +149,18 @@ def replay_linear(spike_times, spiking_neurons, slice_idx, pklf_name, N, delta_t
         for bounds in slice_idx:  # iterate through sustained high activity periods
             lb = bounds[0]; ub = bounds[1]
             idx = np.where((lb <= spike_times) & (spike_times < ub))
-            spike_times_tmp = spike_times[idx]
-            spiking_neurons_tmp = spiking_neurons[idx]
-            t_bins = np.arange(np.floor(lb), np.ceil(ub)+delta_t, delta_t)
-            bin_spike_counts = extract_binspikecount(t_bins, spike_times_tmp, spiking_neurons_tmp, tuning_curves)
-            
+            bin_spike_counts = extract_binspikecount(lb, ub, delta_t, t_incr, spike_times[idx], spiking_neurons[idx], tuning_curves)
+
             # decode place of the animal and try to fit path
             X_posterior = calc_posterior(bin_spike_counts, tuning_curves, delta_t)
             R, fitted_path, _ = fit_trajectory(X_posterior)
             sign, shuffled_Rs = test_significance(bin_spike_counts, tuning_curves, delta_t, R, N)
-            
+
             sign_replays.append(sign)
             results[bounds] = {"X_posterior":X_posterior, "fitted_path":fitted_path, "R":R, "shuffled_Rs":shuffled_Rs, "significance":sign}
-        
+
         significance = 1 if not np.isnan(sign_replays).all() else np.nan
-           
+
         return significance, results
     else:
         return np.nan, {}
@@ -181,8 +179,8 @@ def _autocorrelation(time_series):
     autocorrelation = np.correlate(time_series, time_series, mode="same") / var
 
     return autocorrelation[len(autocorrelation)/2:]
-    
-    
+
+
 def _calc_spectrum(time_series, fs, nperseg=512):
     """
     Estimates the power spectral density of the signal using Welch's method
@@ -192,11 +190,11 @@ def _calc_spectrum(time_series, fs, nperseg=512):
     :return f: frequencies used to evaluate PSD
             Pxx: estimated PSD
     """
-    
+
     f, Pxx = signal.welch(time_series, fs, nperseg=nperseg)
     return f, Pxx
-        
-        
+
+
 def analyse_rate(rate, fs, slice_idx, TFR=False):
     """
     Basic analysis of firing rate: autocorrelatio, PSD, TFR (wavelet analysis)
@@ -209,48 +207,48 @@ def analyse_rate(rate, fs, slice_idx, TFR=False):
              f, Pxx: sample frequencies and power spectral density (results of PSD analysis)
              coefs, freqs: coefficients from wavelet transform and frequencies used
     """
-    
+
     if slice_idx:
         t = np.arange(0, 10000); rates = []
         for bounds in slice_idx:  # iterate through sustained high activity periods
             lb = bounds[0]; ub = bounds[1]
             rates.append(rate[np.where((lb <= t) & (t < ub))[0]])
-            
+
         mean_rates = [np.mean(rate) for rate in rates]
-        
+
         rate_acs = [_autocorrelation(rate) for rate in rates]
         max_acs = [rate_ac[1:].max() for rate_ac in rate_acs]
         t_max_acs = [rate_ac[1:].argmax()+1 for rate_ac in rate_acs]
-                    
+
         PSDs = [_calc_spectrum(rate, fs=fs, nperseg=256) for rate in rates if rate.shape[0] > 256]
         f = PSDs[0][0]  # it might happen that PSDs will be empty because all high activity periods are shorter than 256 ms...
         Pxxs = np.array([tmp[1] for tmp in PSDs])
-            
-        
+
+
         if not TFR:
             return np.mean(mean_rates), rate_acs, np.mean(max_acs), np.mean(t_max_acs), f, Pxxs
         else:
             import pywt
-            
+
             scales = np.linspace(3.5, 5, 200)  # 162-232 Hz  pywt.scale2frequency("morl", scale) / (1/fs)
             wts = [pywt.cwt(rate, scales, "morl", 1/fs) for rate in rates]
             coefs = [tmp[0] for tmp in wts]
             freqs = wts[0][1]
-            
+
             return np.mean(mean_rates), rate_acs, np.mean(max_acs), np.mean(t_max_acs), f, Pxxs, coefs, freqs
-            
+
     else:
         rate_ac = _autocorrelation(rate)
         f, Pxx = _calc_spectrum(rate, fs=fs)
-        
+
         if not TFR:
             return np.mean(rate), rate_ac, rate_ac[1:].max(), rate_ac[1:].argmax()+1, f, Pxx
         else:
             import pywt
-            
+
             scales = np.linspace(3.5, 5, 200)  # 162-232 Hz  pywt.scale2frequency("morl", scale) / (1/fs)
             coefs, freqs = pywt.cwt(rate, scales, "morl", 1/fs)
-            
+
             return np.mean(rate), rate_ac, rate_ac[1:].max(), rate_ac[1:].argmax()+1, f, Pxx, coefs, freqs
 
 
@@ -264,7 +262,7 @@ def _fisher(Pxx):
     fisher_g = Pxx.max() / np.sum(Pxx)
     n = len(Pxx); upper_lim = int(np.floor(1. / fisher_g))
     p_val = np.sum([np.power(-1, i-1) * misc.comb(n, i) * np.power((1-i*fisher_g), n-1) for i in range(1, upper_lim)])
-    
+
     return p_val
 
 
@@ -283,7 +281,7 @@ def ripple(rate_acs, f, Pxx, slice_idx=[], p_th=0.05):
     if slice_idx:
         max_ac_ripple = [rate_ac[3:9].max() for rate_ac in rate_acs]  # hard coded values in ripple range (works with 1ms binning...)
         t_max_ac_ripple = [rate_ac[3:9].argmax()+3 for rate_ac in rate_acs]
-                
+
         p_vals = []; freqs = []; ripple_powers = []
         for i in range(Pxx.shape[0]):
             Pxx_ripple = Pxx[i, :][np.where((150 < f) & (f < 220))]
@@ -304,7 +302,7 @@ def ripple(rate_acs, f, Pxx, slice_idx=[], p_th=0.05):
         p_val = _fisher(Pxx_ripple)
         avg_ripple_freq = f[np.where(150 < f)[0][0] + Pxx_ripple.argmax()] if p_val < p_th else np.nan
         ripple_power = (sum(Pxx_ripple) / sum(Pxx)) * 100
-        
+
         return rate_acs[3:9].max(), rate_acs[3:9].argmax()+3, avg_ripple_freq, ripple_power
 
 
@@ -318,31 +316,31 @@ def gamma(f, Pxx, slice_idx=[], p_th=0.05):
     """
 
     f = np.asarray(f)
-    if slice_idx:                
+    if slice_idx:
         p_vals = []; freqs = []; gamma_powers = []
         for i in range(Pxx.shape[0]):
             Pxx_gamma = Pxx[i, :][np.where((30 < f) & (f < 100))]
             p_vals.append(_fisher(Pxx_gamma))
             freqs.append(Pxx_gamma.argmax())
             gamma_powers.append((sum(Pxx_gamma) / sum(Pxx[i, :])) * 100)
-        
+
         idx = np.where(np.asarray(p_vals) <= p_th)[0].tolist()
         if idx:
             avg_freq = np.mean(np.asarray(freqs)[idx])
             avg_gamma_freq = f[np.where(30 < f)[0][0] + int(avg_freq)]
         else:
             avg_gamma_freq = np.nan
-        
+
         return avg_gamma_freq, np.mean(gamma_powers)
     else:
         Pxx_gamma = Pxx[np.where((30 < f) & (f < 100))]
         p_val = _fisher(Pxx_gamma)
         avg_gamma_freq = f[np.where(30 < f)[0][0] + Pxx_gamma.argmax()] if p_val < p_th else np.nan
         gamma_power = (sum(Pxx_gamma) / sum(Pxx)) * 100
-        
+
         return avg_gamma_freq, gamma_power
-    
-    
+
+
 def _estimate_LFP(StateM, subset):
     """
     Estimates LFP by summing synaptic currents to PCs (assuming that all neurons are at equal distance (1 um) from the electrode)
@@ -353,7 +351,7 @@ def _estimate_LFP(StateM, subset):
 
     t = StateM.t_ * 1000.  # *1000 ms convertion
     LFP = np.zeros_like(t)
-    
+
     for i in subset:
         v = StateM[i].vm*1000 # *1000 mV conversion
         g_exc = StateM[i].g_ampa + StateM[i].g_ampaMF  # this is already in nS (see *z in the equations)
@@ -361,9 +359,9 @@ def _estimate_LFP(StateM, subset):
         g_inh = StateM[i].g_gaba
         i_inh = g_inh * (v - Erev_I * np.ones_like(v))  # pA
         LFP += -(i_exc + i_inh)  # (this is still in pA)
-        
+
     LFP *= 1 / (4 * np.pi * volume_cond * 1e6)  # uV (*1e-6 um conversion)
-    
+
     return t, LFP
 
 
@@ -374,12 +372,12 @@ def _filter(time_series, fs, cut=300.):
     :param fs: sampling frequency
     :param cut: cut off frequency
     """
-    
+
     b, a = signal.butter(3, cut/(fs/2.), btype="lowpass")
-    
+
     return signal.filtfilt(b, a, time_series, axis=0)
-    
-    
+
+
 def analyse_estimated_LFP(StateM, subset, fs=10000.):
     """
     Analyses estimated LFP (see also `_calculate_LFP()`)
@@ -391,7 +389,5 @@ def analyse_estimated_LFP(StateM, subset, fs=10000.):
     LFP = _filter(LFP, fs)
 
     f, Pxx = _calc_spectrum(LFP, fs, nperseg=8192)
-    
+
     return t, LFP, f, Pxx
-    
-   
