@@ -212,7 +212,7 @@ def plot_TFR(coefs, freqs, title_, fig_name):
     ax.set_title("Wavlet transform of %s"%title_)
     ax.set_xlabel("Time (ms)")
     ax.set_ylabel("Frequency (Hz)")
-    ax.set_yticks(np.arange(0, 200, 20)); ax.set_yticklabels(["%.1f"%i for i in freqs[::20]])
+    ax.set_yticks(np.arange(0, 200, 20)); ax.set_yticklabels(["%.1f"%i for i in freqs[::20].copy()])
 
     fig.savefig(fig_name)
     plt.close(fig)
@@ -396,6 +396,17 @@ def plot_LFP(t, LFP, f, Pxx, multiplier_):
     :param f, Pxx:
     """
 
+    try:
+        Pxx_plot = np.zeros_like(Pxx)
+        for i in range(Pxx.shape[0]):
+            Pxx_plot[i, :] = 10 * np.log10(Pxx[i, :] / max(Pxx[i, :]))
+        Pxx_plot_mean = np.mean(Pxx_plot, axis=0)
+    except:
+        Pxx_plot_mean = 10 * np.log10(Pxx / max(Pxx))
+
+    f_ripple = f[np.where((150 < f) & (f < 220))]; Pxx_ripple_plot = Pxx_plot_mean[np.where((150 < f) & (f < 220))]
+    f_gamma = f[np.where((30 < f) & (f < 100))]; Pxx_gamma_plot = Pxx_plot_mean[np.where((30 < f) & (f < 100))]
+
     fig = plt.figure(figsize=(10, 8))
     gs = gridspec.GridSpec(2, 1, height_ratios=[2, 1])
 
@@ -406,16 +417,20 @@ def plot_LFP(t, LFP, f, Pxx, multiplier_):
     ax.set_xlim([t[0], t[-1]])
     ax.set_ylabel('"LFP ($\mu V$)" - currents summed from 400 PCs')
 
-    f = np.asarray(f)
-    f_ROI = f[np.where((0 <= f) & (f < 500))]; Pxx_ROI = Pxx[np.where((0 <= f) & (f < 500))]
-    Pxx_plot = 10 * np.log10(Pxx_ROI / max(Pxx_ROI))
-
     ax2 = fig.add_subplot(gs[1])
-    ax2.plot(f_ROI, Pxx_plot, color="purple", marker="o")
+    try:
+        for Pxx_plot_tmp in Pxx_plot:
+            ax2.plot(f, Pxx_plot_tmp, lw=0.5, color="gray", alpha=0.5)
+    except:
+        pass
+    ax2.plot(f, Pxx_plot_mean, color="purple", marker="o")
+    ax2.plot(f_ripple, Pxx_ripple_plot, "r-", marker="o", linewidth=1.5, label="ripple (150-220 Hz)")
+    ax2.plot(f_gamma, Pxx_gamma_plot, "k-", marker="o", linewidth=1.5, label="gamma (30-100 Hz)")
     ax2.set_title("Power Spectrum Density")
     ax2.set_xlim([0, 500])
     ax2.set_xlabel("Frequency (Hz)")
     ax2.set_ylabel("PSD (dB)")
+    ax2.legend()
 
     sns.despine()
     fig.tight_layout()
@@ -463,7 +478,7 @@ def plot_wmx(wmx, save_name):
 
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(1, 1, 1)
-    i = ax.imshow(wmx*1e9, cmap=plt.get_cmap("jet"))  # nS conversion
+    i = ax.imshow(wmx*1e9, cmap=plt.get_cmap("jet"), origin="lower")  # nS conversion
     i.set_interpolation("nearest")  # set to "None" to less pixels and smooth, nicer figure
     fig.colorbar(i)
     ax.set_title("Learned synaptic weights (nS)")
@@ -494,7 +509,7 @@ def plot_wmx_avg(wmx, n_pops, save_name):
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(1, 1, 1)
 
-    i = ax.imshow(mean_wmx*1e9, cmap=plt.get_cmap("jet"))  # nS conversion
+    i = ax.imshow(mean_wmx*1e9, cmap=plt.get_cmap("jet"), origin="lower")  # nS conversion
     i.set_interpolation("nearest")  # set to "None" to less pixels and smooth, nicer figure
     fig.colorbar(i)
     ax.set_title("Learned avg. synaptic weights (nS)")
@@ -612,24 +627,23 @@ def plot_summary_replay(multipliers, replay, rates_PC, rates_BC):
     plt.close(fig)
 
 
-def plot_summary_ripple(multipliers, ripple_freqs_PC, ripple_freqs_BC, ripple_powers_PC, ripple_powers_BC):
+def plot_summary_ripple(multipliers, ripple_freqs_PC, ripple_freqs_BC, ripple_freqs_LFP, ripple_powers_PC, ripple_powers_BC, ripple_powers_LFP):
     """
     Saves summary figure with ripple freq. and power
     :param multipliers: wmx multipliers
-    :param ripple_freqs_PC, ripple_freqs_BC: exc. and inh. ripple frequency (have to be the same size as multipliers)
-    :param ripple_powers_PC, ripple_powers_BC: exc. and inh. ripple power (have to be the same size as multipliers)
+    :param ripple_freqs_PC, ripple_freqs_BC, ripple_freqs_LFP: exc., inh. and LFP ripple frequency (have to be the same size as multipliers)
+    :param ripple_powers_PC, ripple_powers_BC, ripple_powers_LFP: exc., inh. and LFP ripple power (have to be the same size as multipliers)
     """
 
     fig = plt.figure(figsize=(10, 8))
 
-    ax = fig.add_subplot(2, 1, 1)
+    ax = fig.add_subplot(3, 1, 1)
     ax.plot(multipliers, ripple_freqs_PC, "b-", linewidth=2, marker="o", label="ripple freq (PC)")
     ax2 = ax.twinx()
     ax2.plot(multipliers, ripple_powers_PC, "r-", linewidth=2, marker="*", label="ripple power (PC)")
     ax.set_xlim([multipliers[0], multipliers[-1]])
     ax.set_xticks(multipliers); ax.set_xticklabels(multipliers)
     ax.set_ylabel(ylabel="Frequency (Hz)", color="blue")
-    #ax.set_ylim([np.nanmin(ripple_freqs_PC)-5, np.nanmax(ripple_freqs_PC)+8])
     ax2.set_ylabel(ylabel="Power (%)", color="red")
     ax2.set_ylim([0, 100])
     ax.set_title("Ripple oscillation")
@@ -638,20 +652,32 @@ def plot_summary_ripple(multipliers, ripple_freqs_PC, ripple_freqs_BC, ripple_po
     ax.legend(h1+h2, l1+l2)
 
 
-    ax3 = fig.add_subplot(2, 1, 2)
-    ax3.plot(multipliers, ripple_freqs_BC,  "g-", linewidth=2, marker="o", label="ripple freq (BC)")
+    ax3 = fig.add_subplot(3, 1, 2)
+    ax3.plot(multipliers, ripple_freqs_BC, "g-", linewidth=2, marker="o", label="ripple freq (BC)")
     ax4 = ax3.twinx()
-    ax4.plot(multipliers, ripple_powers_BC,  "r-", linewidth=2, marker="*", label="ripple power (BC)")
+    ax4.plot(multipliers, ripple_powers_BC, "r-", linewidth=2, marker="*", label="ripple power (BC)")
     ax3.set_xlim([multipliers[0], multipliers[-1]])
     ax3.set_xticks(multipliers); ax3.set_xticklabels(multipliers)
     ax3.set_ylabel(ylabel="Frequency (Hz)", color="green")
-    #ax3.set_ylim([np.nanmin(ripple_freqs_BC)-5, np.nanmax(ripple_freqs_BC)+8])
     ax4.set_ylabel(ylabel="Power (%)", color="red")
     ax4.set_ylim([0, 100])
-    ax3.set_xlabel("Scale factors")
     h3, l3 = ax3.get_legend_handles_labels()
     h4, l4 = ax4.get_legend_handles_labels()
     ax3.legend(h3+h4, l3+l4)
+
+    ax5 = fig.add_subplot(3, 1, 3)
+    ax5.plot(multipliers, ripple_freqs_LFP, color="purple", linewidth=2, marker="o", label="ripple freq (LFP)")
+    ax6 = ax5.twinx()
+    ax6.plot(multipliers, ripple_powers_LFP,  "r-", linewidth=2, marker="*", label="ripple power (LFP)")
+    ax5.set_xlim([multipliers[0], multipliers[-1]])
+    ax5.set_xticks(multipliers); ax5.set_xticklabels(multipliers)
+    ax5.set_ylabel(ylabel="Frequency (Hz)", color="purple")
+    ax6.set_ylabel(ylabel="Power (%)", color="red")
+    ax6.set_ylim([0, 100])
+    ax5.set_xlabel("Scale factors")
+    h5, l5 = ax5.get_legend_handles_labels()
+    h6, l6 = ax6.get_legend_handles_labels()
+    ax5.legend(h5+h6, l5+l6)
 
     sns.despine(right=False)
     fig.tight_layout()
@@ -660,24 +686,23 @@ def plot_summary_ripple(multipliers, ripple_freqs_PC, ripple_freqs_BC, ripple_po
     plt.close(fig)
 
 
-def plot_summary_gamma(multipliers, gamma_freqs_PC, gamma_freqs_BC, gamma_powers_PC, gamma_powers_BC):
+def plot_summary_gamma(multipliers, gamma_freqs_PC, gamma_freqs_BC, gamma_freqs_LFP, gamma_powers_PC, gamma_powers_BC, gamma_powers_LFP):
     """
     Saves summary figure with ripple freq. and power
     :param multipliers: wmx multipliers
-    :param gamma_freqs_PC, gamma_freqs_BC: exc. and inh. gamma frequency (have to be the same size as multipliers)
-    :param gamma_powers_PC, gamma_powers_BC: exc. and inh. gamma power (have to be the same size as multipliers)
+    :param gamma_freqs_PC, gamma_freqs_BC, gamma_freqs_LFP: exc., inh. and LFP gamma frequency (have to be the same size as multipliers)
+    :param gamma_powers_PC, gamma_powers_BC, gamma_powers_LFP: exc., inh. and LFP gamma power (have to be the same size as multipliers)
     """
 
     fig = plt.figure(figsize=(10, 8))
 
-    ax = fig.add_subplot(2, 1, 1)
+    ax = fig.add_subplot(3, 1, 1)
     ax.plot(multipliers, gamma_freqs_PC, "b-", linewidth=2, marker="o", label="gamma freq (PC)")
     ax2 = ax.twinx()
     ax2.plot(multipliers, gamma_powers_PC, "r-", linewidth=2, marker="*", label="gamma power (PC)")
     ax.set_xlim([multipliers[0], multipliers[-1]])
     ax.set_xticks(multipliers); ax.set_xticklabels(multipliers)
     ax.set_ylabel(ylabel="Frequency (Hz)", color="blue")
-    #ax.set_ylim([np.nanmin(gamma_freqs_PC)-5, np.nanmax(gamma_freqs_PC)+8])
     ax2.set_ylabel(ylabel="Power (%)", color="red")
     ax2.set_ylim([0, 100])
     ax.set_title("Gamma oscillation")
@@ -686,20 +711,32 @@ def plot_summary_gamma(multipliers, gamma_freqs_PC, gamma_freqs_BC, gamma_powers
     ax.legend(h1+h2, l1+l2)
 
 
-    ax3 = fig.add_subplot(2, 1, 2)
-    ax3.plot(multipliers, gamma_freqs_BC,  "g-", linewidth=2, marker="o", label="gamma freq (BC)")
+    ax3 = fig.add_subplot(3, 1, 2)
+    ax3.plot(multipliers, gamma_freqs_BC, "g-", linewidth=2, marker="o", label="gamma freq (BC)")
     ax4 = ax3.twinx()
-    ax4.plot(multipliers, gamma_powers_BC,  "r-", linewidth=2, marker="*", label="gamma power (BC)")
+    ax4.plot(multipliers, gamma_powers_BC, "r-", linewidth=2, marker="*", label="gamma power (BC)")
     ax3.set_xlim([multipliers[0], multipliers[-1]])
     ax3.set_xticks(multipliers); ax3.set_xticklabels(multipliers)
     ax3.set_ylabel(ylabel="Frequency (Hz)", color="green")
-    #ax3.set_ylim([np.nanmin(gamma_freqs_BC)-5, np.nanmax(gamma_freqs_BC)+8])
     ax4.set_ylabel(ylabel="Power (%)", color="red")
     ax4.set_ylim([0, 100])
-    ax3.set_xlabel("Scale factors")
     h3, l3 = ax3.get_legend_handles_labels()
     h4, l4 = ax4.get_legend_handles_labels()
     ax3.legend(h3+h4, l3+l4)
+
+    ax5 = fig.add_subplot(3, 1, 3)
+    ax5.plot(multipliers, gamma_freqs_LFP, color="purple", linewidth=2, marker="o", label="gamma freq (LFP)")
+    ax6 = ax5.twinx()
+    ax6.plot(multipliers, gamma_powers_LFP, "r-", linewidth=2, marker="*", label="gamma power (LFP)")
+    ax5.set_xlim([multipliers[0], multipliers[-1]])
+    ax5.set_xticks(multipliers); ax5.set_xticklabels(multipliers)
+    ax5.set_ylabel(ylabel="Frequency (Hz)", color="purple")
+    ax6.set_ylabel(ylabel="Power (%)", color="red")
+    ax6.set_ylim([0, 100])
+    ax5.set_xlabel("Scale factors")
+    h5, l5 = ax5.get_legend_handles_labels()
+    h6, l6 = ax6.get_legend_handles_labels()
+    ax5.legend(h5+h6, l5+l6)
 
     sns.despine(right=False)
     fig.tight_layout()

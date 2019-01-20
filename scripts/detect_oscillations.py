@@ -7,6 +7,7 @@ authors: András Ecker, Bence Bagi, Eszter Vértes, Szabolcs Káli last update: 
 import pickle
 import numpy as np
 from scipy import signal, misc
+import pywt
 from bayesian_decoding import load_tuning_curves, extract_binspikecount, calc_posterior, fit_trajectory, test_significance
 
 
@@ -114,6 +115,8 @@ def slice_high_activity(rate, bin_=20, min_len=270.0, th=1.75):
     :param th: rate threshold (above which is 'high activity')
     """
 
+    assert min_len >= 256, "Spectral analysis won't work on sequences shorter than 256"
+
     idx = np.where(_avg_rate(rate, bin_) >= th)[0]
     high_act = _get_consecutive_sublists(idx.tolist())
     slice_idx = []
@@ -195,17 +198,15 @@ def _calc_spectrum(time_series, fs, nperseg=512):
     return f, Pxx
 
 
-def analyse_rate(rate, fs, slice_idx, TFR=False):
+def analyse_rate(rate, fs, slice_idx=[]):
     """
-    Basic analysis of firing rate: autocorrelatio, PSD, TFR (wavelet analysis)
+    Basic analysis of firing rate: autocorrelatio and PSD
     :param rate: firing rate of the neuron population
     :param fs: sampling frequency (for the spectral analysis)
     :param slice_idx: time idx used to slice out high activity states (see `slice_high_activity()`)
-    :param TFR: bool - calculate time freq. repr. (using wavelet analysis)
     :return: mean_rate, rate_ac: mean rate, autocorrelation of the rate
              max_ac, t_max_ac: maximum autocorrelation, time interval of maxAC
              f, Pxx: sample frequencies and power spectral density (results of PSD analysis)
-             coefs, freqs: coefficients from wavelet transform and frequencies used
     """
 
     if slice_idx:
@@ -220,36 +221,58 @@ def analyse_rate(rate, fs, slice_idx, TFR=False):
         max_acs = [rate_ac[1:].max() for rate_ac in rate_acs]
         t_max_acs = [rate_ac[1:].argmax()+1 for rate_ac in rate_acs]
 
-        PSDs = [_calc_spectrum(rate, fs=fs, nperseg=256) for rate in rates if rate.shape[0] > 256]
-        f = PSDs[0][0]  # it might happen that PSDs will be empty because all high activity periods are shorter than 256 ms...
+        PSDs = [_calc_spectrum(rate, fs=fs, nperseg=256) for rate in rates]
+        f = PSDs[0][0]
         Pxxs = np.array([tmp[1] for tmp in PSDs])
 
-
-        if not TFR:
-            return np.mean(mean_rates), rate_acs, np.mean(max_acs), np.mean(t_max_acs), f, Pxxs
-        else:
-            import pywt
-
-            scales = np.linspace(3.5, 5, 200)  # 162-232 Hz  pywt.scale2frequency("morl", scale) / (1/fs)
-            wts = [pywt.cwt(rate, scales, "morl", 1/fs) for rate in rates]
-            coefs = [tmp[0] for tmp in wts]
-            freqs = wts[0][1]
-
-            return np.mean(mean_rates), rate_acs, np.mean(max_acs), np.mean(t_max_acs), f, Pxxs, coefs, freqs
+        return np.mean(mean_rates), rate_acs, np.mean(max_acs), np.mean(t_max_acs), f, Pxxs
 
     else:
         rate_ac = _autocorrelation(rate)
         f, Pxx = _calc_spectrum(rate, fs=fs)
 
-        if not TFR:
-            return np.mean(rate), rate_ac, rate_ac[1:].max(), rate_ac[1:].argmax()+1, f, Pxx
-        else:
-            import pywt
+        return np.mean(rate), rate_ac, rate_ac[1:].max(), rate_ac[1:].argmax()+1, f, Pxx
 
-            scales = np.linspace(3.5, 5, 200)  # 162-232 Hz  pywt.scale2frequency("morl", scale) / (1/fs)
-            coefs, freqs = pywt.cwt(rate, scales, "morl", 1/fs)
 
-            return np.mean(rate), rate_ac, rate_ac[1:].max(), rate_ac[1:].argmax()+1, f, Pxx, coefs, freqs
+def calc_TFR(rate, fs, slice_idx=[]):
+    """
+    Creates time-frequency representation using wavelet analysis
+    :param rate: firing rate of the neuron population
+    :param fs: sampling frequency (for the spectral analysis)
+    :param slice_idx: time idx used to slice out high activity states (see `slice_high_activity()`)
+    :return: coefs, freqs: coefficients from wavelet transform and frequencies used
+    """
+
+    scales = np.linspace(3.5, 5, 300)  # 162-232 Hz  pywt.scale2frequency("morl", scale) / (1/fs)
+
+    if slice_idx:
+        t = np.arange(0, 10000); rates = []
+        for bounds in slice_idx:  # iterate through sustained high activity periods
+            lb = bounds[0]; ub = bounds[1]
+            rates.append(rate[np.where((lb <= t) & (t < ub))[0]])
+
+        wts = [pywt.cwt(rate, scales, "morl", 1/fs) for rate in rates]
+        coefs = [tmp[0] for tmp in wts]
+        freqs = wts[0][1]
+    else:
+        coefs, freqs = pywt.cwt(rate, scales, "morl", 1/fs)
+
+    return coefs, freqs
+
+
+def ripple_AC(rate_acs, slice_idx=[]):
+    """
+    Analyses AC of rate (in the ripple freq)
+    :param rate_acs: auto correlation function(s) of rate see (`analyse_rate()`)
+    :return: max_ac_ripple, t_max_ac_ripple: maximum autocorrelation in ripple range, time interval of maxACR
+    """
+
+    if slice_idx:
+        max_ac_ripple = [rate_ac[3:9].max() for rate_ac in rate_acs]  # hard coded values in ripple range (works with 1ms binning...)
+        t_max_ac_ripple = [rate_ac[3:9].argmax()+3 for rate_ac in rate_acs]
+        return np.mean(max_ac_ripple), np.mean(t_max_ac_ripple)
+    else:
+        return rate_acs[3:9].max(), rate_acs[3:9].argmax()+3
 
 
 def _fisher(Pxx):
@@ -266,22 +289,17 @@ def _fisher(Pxx):
     return p_val
 
 
-def ripple(rate_acs, f, Pxx, slice_idx=[], p_th=0.05):
+def ripple(f, Pxx, slice_idx=[], p_th=0.05):
     """
     Decides if there is a significant high freq. ripple oscillation by applying Fisher g-test on the power spectrum
-    :param rate_acs: auto correlation function(s) of rate see (`analyse_rate()`)
     :param f, Pxx: calculated power spectrum of the neural activity and frequencies used to calculate it (see `analyse_rate()`)
     :param slice_idx: time idx used to slice out high activity states (see `slice_high_activity()`)
     :param p_th: significance threshold for Fisher g-test
-    :return: max_ac_ripple, t_max_ac_ripple: maximum autocorrelation in ripple range, time interval of maxACR
-             avg_ripple_freq, ripple_power: average frequency and power of ripple band oscillation
+    :return: avg_ripple_freq, ripple_power: average frequency and power of ripple band oscillation
     """
 
     f = np.asarray(f)
     if slice_idx:
-        max_ac_ripple = [rate_ac[3:9].max() for rate_ac in rate_acs]  # hard coded values in ripple range (works with 1ms binning...)
-        t_max_ac_ripple = [rate_ac[3:9].argmax()+3 for rate_ac in rate_acs]
-
         p_vals = []; freqs = []; ripple_powers = []
         for i in range(Pxx.shape[0]):
             Pxx_ripple = Pxx[i, :][np.where((150 < f) & (f < 220))]
@@ -296,14 +314,14 @@ def ripple(rate_acs, f, Pxx, slice_idx=[], p_th=0.05):
         else:
             avg_ripple_freq = np.nan
 
-        return np.mean(max_ac_ripple), np.mean(t_max_ac_ripple), avg_ripple_freq, np.mean(ripple_powers)
+        return avg_ripple_freq, np.mean(ripple_powers)
     else:
         Pxx_ripple = Pxx[np.where((150 < f) & (f < 220))]
         p_val = _fisher(Pxx_ripple)
         avg_ripple_freq = f[np.where(150 < f)[0][0] + Pxx_ripple.argmax()] if p_val < p_th else np.nan
         ripple_power = (sum(Pxx_ripple) / sum(Pxx)) * 100
 
-        return rate_acs[3:9].max(), rate_acs[3:9].argmax()+3, avg_ripple_freq, ripple_power
+        return avg_ripple_freq, ripple_power
 
 
 def gamma(f, Pxx, slice_idx=[], p_th=0.05):
@@ -365,7 +383,7 @@ def _estimate_LFP(StateM, subset):
     return t, LFP
 
 
-def _filter(time_series, fs, cut=300.):
+def _filter(time_series, fs, cut=500.):
     """
     Low pass filters time series (3rd order Butterworth filter) - used for LFP
     :param time_series: time series to analyse
@@ -374,20 +392,41 @@ def _filter(time_series, fs, cut=300.):
     """
 
     b, a = signal.butter(3, cut/(fs/2.), btype="lowpass")
-
     return signal.filtfilt(b, a, time_series, axis=0)
 
 
-def analyse_estimated_LFP(StateM, subset, fs=10000.):
+def analyse_estimated_LFP(StateM, subset, slice_idx=[], fs=10000.):
     """
     Analyses estimated LFP (see also `_calculate_LFP()`)
     :param StateM, subset: see `_calculate_LFP()`
+    :param slice_idx: time idx used to slice out high activity states (see `slice_high_activity()`)
     :param fs: sampling frequency
+    :return: t, LFP: estimated LFP and corresponding time vector
+             f, Pxx: sample frequencies and power spectral density (results of PSD analysis)
     """
 
     t, LFP = _estimate_LFP(StateM, subset)
     LFP = _filter(LFP, fs)
 
-    f, Pxx = _calc_spectrum(LFP, fs, nperseg=8192)
+    LFPs = []
+    if slice_idx:
+        for bounds in slice_idx:  # iterate through sustained high activity periods
+            lb = bounds[0]; ub = bounds[1]
+            LFPs.append(LFP[np.where((lb <= t) & (t < ub))[0]])
+
+        PSDs = [_calc_spectrum(LFP_tmp, fs, nperseg=2024) for LFP_tmp in LFPs]
+        f = PSDs[0][0]
+        Pxx = np.array([tmp[1] for tmp in PSDs])
+    else:
+        f, Pxx = _calc_spectrum(LFP, fs, nperseg=2024)
+
+    # for comparable results cut spectrum at 500 Hz
+    f = np.asarray(f)
+    idx = np.where(f < 500)[0]
+    f = f[idx]
+    try:
+        Pxx = Pxx[:, idx]
+    except:
+        Pxx = Pxx[idx]
 
     return t, LFP, f, Pxx
