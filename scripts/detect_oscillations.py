@@ -215,17 +215,16 @@ def analyse_rate(rate, fs, slice_idx=[]):
             lb = bounds[0]; ub = bounds[1]
             rates.append(rate[np.where((lb <= t) & (t < ub))[0]])
 
-        mean_rates = [np.mean(rate) for rate in rates]
-
-        rate_acs = [_autocorrelation(rate) for rate in rates]
+        # AC and PSD are only analyised in the selected parts...
+        rate_acs = [_autocorrelation(rate_tmp) for rate_tmp in rates]
         max_acs = [rate_ac[1:].max() for rate_ac in rate_acs]
         t_max_acs = [rate_ac[1:].argmax()+1 for rate_ac in rate_acs]
 
-        PSDs = [_calc_spectrum(rate, fs=fs, nperseg=256) for rate in rates]
+        PSDs = [_calc_spectrum(rate_tmp, fs=fs, nperseg=256) for rate_tmp in rates]
         f = PSDs[0][0]
         Pxxs = np.array([tmp[1] for tmp in PSDs])
 
-        return np.mean(mean_rates), rate_acs, np.mean(max_acs), np.mean(t_max_acs), f, Pxxs
+        return np.mean(rate), rate_acs, np.mean(max_acs), np.mean(t_max_acs), f, Pxxs
 
     else:
         rate_ac = _autocorrelation(rate)
