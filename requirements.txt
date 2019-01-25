@@ -1,0 +1,7 @@
+numpy>=1.15
+scipy>=1.1
+matplotlib
+seaborn
+pandas
+brian2>=2.1.3
+PyWavelets
