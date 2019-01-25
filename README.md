@@ -3,8 +3,8 @@
 To run:
 
     git clone https://github.com/KaliLab/ca3net.git
-    pip install -r requirements.txt
     cd ca3net
+    pip install -r requirements.txt
     mkdir figures
     cd scripts
     python generate_spike_train  # generate CA3 like spike trains (as exploration of a maze)
