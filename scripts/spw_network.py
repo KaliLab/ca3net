@@ -127,7 +127,7 @@ def load_wmx(pklf_name):
     return wmx_PC_E
 
 
-def run_simulation(wmx_PC_E, que, save_spikes, verbose=True):
+def run_simulation(wmx_PC_E, que, save_spikes, seed, verbose=True):
     """
     Sets up the network and runs simulation
     :param wmx_PC_E: np.array representing the recurrent excitatory synaptic weight matrix
@@ -137,8 +137,8 @@ def run_simulation(wmx_PC_E, que, save_spikes, verbose=True):
     :return SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC: Brian2 monitors (+ array of selected cells used by multi state monitor)
     """
 
-    np.random.seed(12345)
-    pyrandom.seed(12345)
+    np.random.seed(seed)
+    pyrandom.seed(seed)
 
     PCs = NeuronGroup(nPCs, model=eqs_PC, threshold="vm>spike_th_PC",
                       reset="vm=Vreset_PC; w+=b_PC", refractory=tref_PC, method="exponential_euler")
@@ -156,7 +156,6 @@ def run_simulation(wmx_PC_E, que, save_spikes, verbose=True):
         # generate short (200ms) Poisson spike train at 20Hz (with `PoissonGroup()` one can't specify the duration)
         from poisson_proc import hom_poisson
 
-        spike_times = np.asarray(hom_poisson(20.0, 10, t_max=0.2, seed=12345))
         spiking_neurons = np.zeros_like(spike_times)
         for neuron_id in range(1, 100):
             spike_times_tmp = np.asarray(hom_poisson(20.0, 10, t_max=0.2, seed=12345+neuron_id))
@@ -328,6 +327,7 @@ if __name__ == "__main__":
 
     place_cell_ratio = 0.5
     linear = True
+    seed = 12345
 
     f_in = "wmx_%s_%.1f_linear.pkl"%(STDP_mode, place_cell_ratio) if linear else "wmx_%s_%.1f.pkl"%(STDP_mode, place_cell_ratio)
     PF_pklf_name = os.path.join(base_path, "files", "PFstarts_%s_linear.pkl"%place_cell_ratio) if linear else None
@@ -339,7 +339,7 @@ if __name__ == "__main__":
     wmx_PC_E = load_wmx(pklf_name) * 1e9 # *1e9 nS conversion
 
     SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC = run_simulation(wmx_PC_E,
-                                                                                 que=que, save_spikes=save_spikes, verbose=verbose)
+                                                                                 que=que, save_spikes=save_spikes, seed=seed, verbose=verbose)
     _ = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC,
                         multiplier=1, linear=linear, pklf_name=PF_pklf_name, dir_name=dir_name, TFR=TFR, verbose=verbose)
 

@@ -7,14 +7,14 @@ author: András Ecker last update: 09.2018
 import os, sys
 import numpy as np
 import matplotlib.pyplot as plt
-from plots import *
+from plots import plot_summary_replay, plot_summary_ripple, plot_summary_gamma, plot_summary_AC
 from spw_network import load_wmx, run_simulation, analyse_results
 
 
 base_path = os.path.sep.join(os.path.abspath("__file__").split(os.path.sep)[:-2])
-header = "multiplier, replay interval, PC rate, BC rate, " \
-         "PC ripple freq, PC ripple power, BC ripple freq, BC ripple power, " \
-         "PC gamma freq, PC gamma power, BC gamma freq, BC gamma power, " \
+header = "multiplier, replay, PC rate, BC rate, " \
+         "PC ripple freq, PC ripple power, BC ripple freq, BC ripple power, LFP ripple freq, LFP ripple power, " \
+         "PC gamma freq, PC gamma power, BC gamma freq, BC gamma power, LFP gamma freq, LFP gamma power, " \
          "PC max autocorr, PC max ripple range autocorr, BC max autocorr, BC max ripple range autocorr"
 
 
@@ -28,15 +28,16 @@ if __name__ == "__main__":
 
     place_cell_ratio = 0.5
     linear = True
+    seed = 12345
 
     f_in = "wmx_%s_%.1f_linear.pkl"%(STDP_mode, place_cell_ratio); multipliers = np.arange(0.8, 1.3, 0.1)
     #f_in = "wmx_%s_%.1f_2envs_linear.pkl"%(STDP_mode, place_cell_ratio); multipliers = np.arange(0.6, 1.1, 0.1)
-    #f_in = "wmx_%s_%.1f_shuffled_linear.pkl"%(STDP_mode, place_cell_ratio); multipliers = np.arange(0.8, 1.3, 0.1)
+    #f_in = "wmx_%s_%.1f_shuffled_linear.pkl"%(STDP_mode, place_cell_ratio)#; multipliers = np.arange(0.8, 1.3, 0.1)
     #f_in = "wmx_%s_%.1f_binary_linear.pkl"%(STDP_mode, place_cell_ratio); multipliers = np.arange(1.3, 1.8, 0.1)
     #f_in = "wmx_%s_%.1f_block_shuffled_linear.pkl"%(STDP_mode, place_cell_ratio); multipliers = np.arange(0.8, 1.3, 0.1)
     print f_in
     PF_pklf_name = os.path.join(base_path, "files", "PFstarts_%s_linear.pkl"%place_cell_ratio) if linear else None
-    f_out = "%s.txt"%f_in[4:-4]
+    f_out = "%s_%s.txt"%(f_in[4:-4], seed)
 
     que = False; save_spikes = False; verbose = False; TFR = False
 
@@ -49,7 +50,7 @@ if __name__ == "__main__":
         dir_name = os.path.join(base_path, "figures", "%.2f_replay_det_%s_%.1f"%(multiplier, STDP_mode, place_cell_ratio)) if linear else None
 
         SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC = run_simulation(wmx_PC_E*multiplier,
-                                                                                     que=que, save_spikes=save_spikes, verbose=verbose)
+                                                                                     que=que, save_spikes=save_spikes, seed=seed, verbose=verbose)
         results[i, :] = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC,
                                         multiplier=multiplier, linear=linear, pklf_name=PF_pklf_name, dir_name=dir_name, TFR=TFR, verbose=verbose)
         del SM_PC; del SM_BC; del RM_PC; del RM_BC; del StateM_PC; del StateM_BC; plt.close("all")
