@@ -373,8 +373,10 @@ def _estimate_LFP(StateM, subset):
         v = StateM[i].vm*1000 # *1000 mV conversion
         g_exc = StateM[i].g_ampa + StateM[i].g_ampaMF  # this is already in nS (see *z in the equations)
         i_exc = g_exc * (v - Erev_E * np.ones_like(v))  # pA
+        i_exc[np.where(i_exc) > 0] = 0.  # delete spiking artefacts (PC spike detection threshold is ~+20mV)
         g_inh = StateM[i].g_gaba
         i_inh = g_inh * (v - Erev_I * np.ones_like(v))  # pA
+        i_inh[np.where(i_inh) > 0] = 0.  # delete spiking artefacts (PC spike detection threshold is ~+20mV)
         LFP += -(i_exc + i_inh)  # (this is still in pA)
 
     LFP *= 1 / (4 * np.pi * volume_cond * 1e6)  # uV (*1e-6 um conversion)
