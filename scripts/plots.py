@@ -779,9 +779,43 @@ def plot_summary_AC(multipliers, max_acs_PC, max_acs_BC, max_acs_ripple_PC, max_
     plt.close(fig)
 
 
+def plot_summary_BC(freqs, powers, xlabel, xticklabels, ylabel, yticklabels, save_name):
+    """
+    Saves figure with parameter sweeps from BC pop's
+    :params freqs, powers: matrices with ripple frequencies and powers (see `optimization/analyse_BC_network`)
+    :params xticklabels, yticklabels: params used to create the matrices (see `optimization/analyse_BC_network`)
+    :params xlabel, ylabel: axlables
+    :param save_name: name of saved img
+    """
+
+    fig = plt.figure(figsize=(14, 7))
+
+    ax = fig.add_subplot(1, 2, 1)
+    i = ax.imshow(freqs, cmap=plt.get_cmap("jet"), origin="lower", aspect="auto", interpolation=None)
+    fig.colorbar(i)
+    ax.set_title("Ripple oscillation freq. in BC network (Hz)")
+    ax.set_xlabel(xlabel)
+    ax.set_xticks(np.arange(0, len(xticklabels))); ax.set_xticklabels(xticklabels)
+    ax.set_ylabel(ylabel)
+    ax.set_yticks(np.arange(0, len(yticklabels))); ax.set_yticklabels(yticklabels)
+
+    ax2 = fig.add_subplot(1, 2, 2)
+    i2 = ax2.imshow(powers, cmap=plt.get_cmap("jet"), origin="lower", aspect="auto", interpolation=None)
+    fig.colorbar(i2); i2.set_clim(0, 100)
+    ax2.set_title("Ripple oscillation power in BC network")
+    ax2.set_xlabel(xlabel)
+    ax2.set_xticks(np.arange(0, len(xticklabels))); ax2.set_xticklabels(xticklabels)
+    ax2.set_ylabel(ylabel)
+    ax2.set_yticks(np.arange(0, len(yticklabels))); ax2.set_yticklabels(yticklabels)
+
+    fig.tight_layout()
+    fig_name = os.path.join(fig_dir, "%s.png"%save_name)
+    fig.savefig(fig_name)
+
+
 def plot_evolution(ngen, min_fit, mean_fit, std_fit, save_name):
     """
-    Saves figure with the evolution of fittnes error (see: `optimization/optimize_network()`)
+    Saves figure with the evolution of fittnes error (see: `optimization/optimize_network`)
     :param ngen: number of generations
     :param min_fit: minimum of fitting errors (see bpop: _,_,log,_ = opt.run())
     :param mean_fit: mean of fitting errors (see bpop: _,_,log,_ = opt.run())
