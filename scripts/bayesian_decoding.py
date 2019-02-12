@@ -14,6 +14,9 @@ import multiprocessing as mp
 from poisson_proc import get_tuning_curve_linear
 
 
+infield_rate = 20.0  # avg. in-field firing rate [Hz]
+
+
 def _load_PF_starts(pklf_name):
     """
     Loads in saved place field starting points [rad]
@@ -30,13 +33,25 @@ def _load_PF_starts(pklf_name):
 def load_tuning_curves(pklf_name, spatial_points):
     """
     Loads in tau_i(x) tuning curves (used for generating 'teaching' spike train, see `poisson_proc.py`)
+    (Can handle multiple place fields in different environments)
     :param pklf_name: see `_load_PF_starts`
     :param spatial_points: spatial coordinates to evaluate the tuning curves
     :return: tuning_curves: dict of tuning curves {neuronID: tuning curve}
     """
 
     place_fields = _load_PF_starts(pklf_name)
-    tuning_curves = {neuron_id: get_tuning_curve_linear(spatial_points, phi_start) for neuron_id, phi_start in place_fields.iteritems()}
+    #tuning_curves = {neuron_id: get_tuning_curve_linear(spatial_points, phi_start) for neuron_id, phi_start in place_fields.iteritems()}
+    tuning_curves = {}
+    for neuron_id, phi_start in place_fields.iteritems():
+        if type(phi_start) != list:
+            tuning_curves[neuron_id] = get_tuning_curve_linear(spatial_points, phi_start)
+        else:
+            tuning_curves_ = np.zeros((len(phi_start), len(spatial_points)))
+            for i, phi_start_ in enumerate(phi_start):
+                tuning_curves_[i, :] = get_tuning_curve_linear(spatial_points, phi_start_)
+            tuning_curve = np.sum(tuning_curves_, axis=0)
+            tuning_curve[np.where(tuning_curve > 1.)] = 1.
+            tuning_curves[neuron_id] = tuning_curve
 
     return tuning_curves
 
@@ -74,8 +89,9 @@ def calc_posterior(bin_spike_counts, tuning_curves, delta_t):
     """
     Calculates posterior distribution of decoded place Pr(x|spikes) based on Davison et al. 2009
     Pr(spikes|x) = \prod_{i=1}^N \frac{(\Delta t*tau_i(x))^n_i}{n_i!} e^{-\Delta t*tau_i(x)} (* uniform prior...)
+    (It actually implements it via log(likelihoods) for numerical stability)
     Assumptions: independent neurons; firing rates modeled with Poisson processes
-    Vectorized implementation using only the spiking neurons in each bin (+ deleting loads of 0s afterwards because of 0.0 tuning curve values)
+    Vectorized implementation using only the spiking neurons in each bin (plus taking only the highest fraction before summing...)
     #TODO: maybe update prior insted of leaving it uniform?
     :param bin_spike_counts: list (1 entry for every time bin) of spike dictionaries {i: n_i} (see `extract_binspikecount()`)
     :param tuning_curves: dictionary of tuning curves {neuronID: tuning curve} (see `load_tuning_curves()`)
@@ -98,21 +114,24 @@ def calc_posterior(bin_spike_counts, tuning_curves, delta_t):
         n_spikes = np.zeros_like(expected_spikes)  # dim:x*i_spiking
         n_factorials = np.ones_like(expected_spikes)  # dim:x*i_spiking
         for j, (neuron_id, n_spike) in enumerate(spikes.iteritems()):
-            expected_spikes[:, j] = tuning_curves[neuron_id] * delta_t
+            tuning_curve = tuning_curves[neuron_id] * infield_rate
+            tuning_curve[np.where(tuning_curve <= 0.1)] = 0.1
+            expected_spikes[:, j] = tuning_curve * delta_t
             n_spikes[:, j] = n_spike
             n_factorials[:, j] = factorial(n_spike).item()
 
-        # calculate likelihood
-        likelihoods = np.power(expected_spikes, n_spikes)  # dim:x*i_spiking
-        likelihoods = np.multiply(likelihoods, 1.0/n_factorials)
-        likelihoods = np.multiply(likelihoods, np.exp(-expected_spikes))
-        likelihoods[np.where(likelihoods < 1e-5)] = 1.0 # replace (almost) 0s from tau_is before prod for numerical stability
-        likelihoods = np.prod(likelihoods, axis=1)  # dim:x*1
-        likelihoods[np.where(likelihoods == 1.0)] = 0.0 # replace rows with pure (almost) 0 tau_is
+        # calculate log(likelihood)
+        likelihoods = np.multiply(expected_spikes, 1.0/n_factorials)
+        likelihoods = np.multiply(n_spikes, np.log(likelihoods))
+        likelihoods = likelihoods - delta_t * expected_spikes
+        tmp = np.partition(likelihoods, 20, axis=1)
+        likelihoods = tmp[:, -20:]  # take only the 20 highest values for numerical stability
+        likelihoods = np.sum(likelihoods, axis=1)
+        likelihoods -= np.max(likelihoods)  # normalize before exp()
+        likelihoods = np.exp(likelihoods)
 
         # calculate posterior
-        if np.sum(likelihoods) != 0.0:
-            X_posterior[:, t] = likelihoods / np.sum(likelihoods)
+        X_posterior[:, t] = likelihoods / np.sum(likelihoods)
 
     return X_posterior
 
