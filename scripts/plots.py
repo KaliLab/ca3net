@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 """
 Helper functions to plot dynamics, weight matrix and couple of other things
-authors: András Ecker, Bence Bagi last update: 10.2018
+authors: András Ecker, Bence Bagi last update: 02.2019
 """
 
 import os
@@ -9,7 +9,7 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-from detect_oscillations import _avg_rate
+from helper import _avg_rate
 
 
 sns.set(style="ticks", context="notebook")
@@ -102,26 +102,38 @@ def plot_posterior_trajectory(X_posterior, fitted_path, R, fig_name, temporal_re
     plt.close(fig)
 
 
-def plot_step_sizes(step_sizes, fig_name, temporal_res):
+def plot_step_sizes(gamma_rate, step_sizes, avg_step_size, delta_t, fig_name):
     """
     Saves figure with step sizes within ML trajectories
+    :param gama_rate: gamma freq filtered PC firing rate
     :param step_sizes: see `analyse_movement.py`
+    :param avg_step_size: theoretical avg. step size
+    :param delta_t: width of time windows used (only for xlabel)
     :param fig_name: name of saved img
-    :param temporal_res: temporal resolution used for binning spikes (used only for xlabel scaling)
     """
 
     fig = plt.figure(figsize=(10, 6.5))
-    ax = fig.add_subplot(1, 1, 1)
+    ax = fig.add_subplot(2, 1, 1)
+
+    t_gamma = np.linspace(0, len(gamma_rate), len(gamma_rate))
+    ax.plot(t_gamma, gamma_rate, color="blue")
+    ax.set_title("Background gamma")
+    ax.set_xlim([0, t_gamma[-1]])
+    ax.set_ylabel("PC rate in the gamma band")
+    ax.set_yticks([]); ax.set_yticklabels([])
+
+    t = np.linspace(delta_t/2, len(gamma_rate)-delta_t/2, len(step_sizes))
+    ax2 = fig.add_subplot(2, 1, 2)
     sns.despine()
+    ax2.axhline(avg_step_size, color="gray", ls="--", zorder=1)
+    ax2.plot(t, step_sizes, "k-", lw=1.5, zorder=1)
+    ax2.scatter(t, step_sizes, color="red", zorder=2)
+    ax2.set_title("Relative movement based on MLE trajectory")
+    ax2.set_xlim([0, t_gamma[-1]]); ax2.set_xlabel("Time (ms)")
+    ax2.set_ylabel("(Relative) Movement")
 
-    t = np.linspace(0, len(step_sizes)*temporal_res, len(step_sizes))
-    ax.axhline(0, color="gray", zorder=1)
-    ax.plot(t, step_sizes, "k-", lw=1.5, zorder=1)
-    ax.scatter(t, step_sizes, color="red", zorder=2)
-    ax.set_title("Relative movement based on MLE trajectory")
-    ax.set_xlim(0, t[-1]); ax.set_xlabel("Time (ms)")
-    ax.set_ylabel("(Relative) Movement")
-
+    fig.tight_layout()
+    fig.align_ylabels([ax, ax2])
     fig.savefig(fig_name)
     plt.close(fig)
 
