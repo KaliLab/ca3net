@@ -1,177 +1,19 @@
 # -*- coding: utf8 -*-
 """
 Functions used to extract dynamic features: detecting sequence replay, computing AC and PSD of population rate, checking for significant frequencies, ...
-authors: András Ecker, Bence Bagi, Eszter Vértes, Szabolcs Káli last update: 09.2018
+authors: András Ecker, Bence Bagi, Eszter Vértes, Szabolcs Káli last update: 02.2019
 """
 
 import pickle
 import numpy as np
 from scipy import signal, misc
 import pywt
-from bayesian_decoding import load_tuning_curves, extract_binspikecount, calc_posterior, fit_trajectory, test_significance
-
-
-Erev_E = 0.0  # mV
-Erev_I = -70.0  # mV
-len_sim = 10000  # ms
-volume_cond = 1 / 3.54  # S/m
-
-
-def preprocess_monitors(SM, RM, calc_ISI=True):
-    """
-    preprocess Brian's SpikeMonitor and PopulationRateMonitor data for further analysis and plotting
-    :param SM: Brian2 SpikeMonitor
-    :param RM: Brian2 PopulationRateMonitor
-    :param calc_ISI: bool for calculating ISIs
-    :return spike_times, spiking_neurons: 2 lists: spike times and corresponding neuronIDs
-            rate: firing rate of the population
-            ISI_hist and ISI_bin_edges: bin heights and edges of the histogram of the ISI of the population
-    """
-
-    spike_times = np.array(SM.t_) * 1000.  # *1000 ms conversion
-    spiking_neurons = np.array(SM.i_)
-    tmp_spike_times = SM.spike_trains().items()
-    rate = np.array(RM.rate_).reshape(-1, 10).mean(axis=1)
-
-    if calc_ISI:
-        ISIs = np.hstack([np.diff(spikes_i*1000) for i, spikes_i in tmp_spike_times])  # *1000 ms conversion
-        ISI_hist, bin_edges = np.histogram(ISIs, bins=20, range=(0,1000))
-
-        return spike_times, spiking_neurons, rate, ISI_hist, bin_edges
-    else:
-        return spike_times, spiking_neurons, rate
-
-
-def replay_circular(ISI_hist, th=0.7):
-    """
-    Checks if there is sequence replay in the circular case (simply based on repetition in ISIs)
-    :param ISI_hist: inter spike intervals (see `preprocess_monitors()`)
-    :param th: threshold for spike count in the highest and 2 nearest bins
-    :return: replay: 1/nan for detected/non-detected replay
-             avg_replay_interval: average replay interval calculated from ISIs (used only for tuning)
-    """
-
-    max_ID = np.argmax(ISI_hist)
-    bins_3 = ISI_hist[max_ID-1:max_ID+2] if 1 <= max_ID <= len(ISI_hist)-2 else []
-
-    replay = 1 if sum(int(i) for i in ISI_hist) * th < sum(int(i) for i in bins_3) else np.nan
-
-    # this part is only used for tuning...
-    bin_means = np.linspace(175, 825, 14) # hard coded variable, which only works with rate binned into 20 bins in `preprocess_monitors()`...
-    #...and [3:16] passed in `spw_network.py/analyse_results()`
-    tmp = ISI_hist[max_ID-1]*bin_means[max_ID-1] + ISI_hist[max_ID]*bin_means[max_ID] + ISI_hist[max_ID+1]*bin_means[max_ID+1]
-    avg_replay_interval = tmp / (ISI_hist[max_ID-1] + ISI_hist[max_ID] + ISI_hist[max_ID+1])
-
-    return replay, avg_replay_interval
-
-
-def _avg_rate(rate, bin_, zoomed=False):
-    """
-    Averages rate (used also for bar plots)
-    :param rate: np.array representing firing rates (hard coded for 10000 ms simulations)
-    :param bin_: bin size
-    :param zoomed: bool for zoomed in plots
-    """
-
-    t = np.linspace(0, len_sim, len(rate))
-    t0 = 0 if not zoomed else 9900
-    t1 = np.arange(t0, len_sim, bin_)
-    t2 = t1 + bin_
-    avg_rate = np.zeros_like(t1, dtype=np.float)
-    for i, (t1_, t2_) in enumerate(zip(t1, t2)):
-        avg_ = np.mean(rate[np.where((t1_ <= t) & (t < t2_))])
-        if avg_ != 0.:
-            avg_rate[i] = avg_
-
-    return avg_rate
-
-
-def _get_consecutive_sublists(list_):
-    """
-    Groups list into sublists of consecutive numbers
-    :param list_: input list to group
-    :return cons_lists: list of lists with consecutive numbers
-    """
-
-    # get upper bounds of consecutive sublists
-    ubs = [x for x,y in zip(list_, list_[1:]) if y-x != 1]
-
-    cons_lists = []; lb = 0
-    for ub in ubs:
-        tmp = [x for x in list_[lb:] if x <= ub]
-        cons_lists.append(tmp)
-        lb += len(tmp)
-    cons_lists.append([x for x in list_[lb:]])
-
-    return cons_lists
-
-
-def slice_high_activity(rate, bin_=20, min_len=270.0, th=1.75):
-    """
-    Slices out high network activity - which will be candidates for replay detection
-    :param rate: firing rate of the population
-    :param bin: bin size for rate averaging (see `_avg_rate()`)
-    :param min_len: minimum length of continuous high activity (in ms)
-    :param th: rate threshold (above which is 'high activity')
-    """
-
-    assert min_len >= 256, "Spectral analysis won't work on sequences shorter than 256"
-
-    idx = np.where(_avg_rate(rate, bin_) >= th)[0]
-    high_act = _get_consecutive_sublists(idx.tolist())
-    slice_idx = []
-    for tmp in high_act:
-        if len(tmp) >= np.floor(min_len/bin_):
-            slice_idx.append((tmp[0]*bin_, (tmp[-1]+1)*bin_))
-
-    if not slice_idx:
-        print "Sustained high network activity can't be detected (bin size:%i, min length:%.1f and threshold:%.2f)!"%(bin_, min_len, th)
-
-    return slice_idx
-
-
-def replay_linear(spike_times, spiking_neurons, slice_idx, pklf_name, N, delta_t=10, t_incr=10, n_spatial_points=50):
-    """
-    Checks if there is sequence replay, using methods originating from Davison et al. 2009 (see more in `bayesian_decoding.py`)
-    :param spike_times, spiking_neurons: see `preprocess_monitors()`
-    :param slice_idx: time idx used to slice out high activity states (see `slice_high_activity()`)
-    :param pklf_name: filename of saved place fields (used for tuning curves, see `bayesian_decoding/load_tuning_curves()`)
-    :param N: number of shuffled versions tested (significance test, see `bayesian_decoding/test_significance()`)
-    :param delta_t: length of time bins used for decoding (in ms)
-    :param t_incr: increment of time bins (see `bayesian_decoding/extract_binspikecount()`)
-    :param n_spatial_points: number of spatial points to consider for decoding
-    :return: significance: 1/nan for significant/non-significant replay detected
-             results: dictinary of stored results
-    """
-
-    if slice_idx:
-        spatial_points = np.linspace(0, 2*np.pi, n_spatial_points)
-        tuning_curves = load_tuning_curves(pklf_name, spatial_points)
-
-        sign_replays = []; results = {}
-        for bounds in slice_idx:  # iterate through sustained high activity periods
-            lb = bounds[0]; ub = bounds[1]
-            idx = np.where((lb <= spike_times) & (spike_times < ub))
-            bin_spike_counts = extract_binspikecount(lb, ub, delta_t, t_incr, spike_times[idx], spiking_neurons[idx], tuning_curves)
-
-            # decode place of the animal and try to fit path
-            X_posterior = calc_posterior(bin_spike_counts, tuning_curves, delta_t)
-            R, fitted_path, _ = fit_trajectory(X_posterior)
-            sign, shuffled_Rs = test_significance(bin_spike_counts, tuning_curves, delta_t, R, N)
-
-            sign_replays.append(sign)
-            results[bounds] = {"X_posterior":X_posterior, "fitted_path":fitted_path, "R":R, "shuffled_Rs":shuffled_Rs, "significance":sign}
-
-        significance = 1 if not np.isnan(sign_replays).all() else np.nan
-
-        return significance, results
-    else:
-        return np.nan, {}
+from helper import _avg_rate, _get_consecutive_sublists, _estimate_LFP
 
 
 def _autocorrelation(time_series):
     """
-    Computes the autocorrelation of a time series (to find repetitive patterns)
+    Computes the autocorrelation of a time series
     R(\tau) = \frac{E[(X_t - \mu)(X_{t+\tau} - \mu)]}{\sigma^2}
     :param time_series: time series to analyse
     :return: autocorrelation
@@ -220,7 +62,7 @@ def analyse_rate(rate, fs, slice_idx=[]):
         max_acs = [rate_ac[1:].max() for rate_ac in rate_acs]
         t_max_acs = [rate_ac[1:].argmax()+1 for rate_ac in rate_acs]
 
-        PSDs = [_calc_spectrum(rate_tmp, fs=fs, nperseg=256) for rate_tmp in rates]
+        PSDs = [_calc_spectrum(rate_tmp, fs=fs, nperseg=128) for rate_tmp in rates]
         f = PSDs[0][0]
         Pxxs = np.array([tmp[1] for tmp in PSDs])
 
@@ -358,41 +200,27 @@ def gamma(f, Pxx, slice_idx=[], p_th=0.05):
         return avg_gamma_freq, gamma_power
 
 
-def _estimate_LFP(StateM, subset):
+def lowpass_filter(time_series, fs=10000., cut=500.):
     """
-    Estimates LFP by summing synaptic currents to PCs (assuming that all neurons are at equal distance (1 um) from the electrode)
-    :param StateM: Brian2 StateMonitor object (of the PC population)
-    :param subset: IDs of the recorded neurons
-    :return: t, LFP: estimated LFP (in uV) and corresponding time points (in ms)
-    """
-
-    t = StateM.t_ * 1000.  # *1000 ms convertion
-    LFP = np.zeros_like(t)
-
-    for i in subset:
-        v = StateM[i].vm*1000 # *1000 mV conversion
-        g_exc = StateM[i].g_ampa + StateM[i].g_ampaMF  # this is already in nS (see *z in the equations)
-        i_exc = g_exc * (v - Erev_E * np.ones_like(v))  # pA
-        i_exc[np.where(i_exc) > 0] = 0.  # delete spiking artefacts (PC spike detection threshold is ~+20mV)
-        g_inh = StateM[i].g_gaba
-        i_inh = g_inh * (v - Erev_I * np.ones_like(v))  # pA
-        i_inh[np.where(i_inh) > 0] = 0.  # delete spiking artefacts (PC spike detection threshold is ~+20mV)
-        LFP += -(i_exc + i_inh)  # (this is still in pA)
-
-    LFP *= 1 / (4 * np.pi * volume_cond * 1e6)  # uV (*1e-6 um conversion)
-
-    return t, LFP
-
-
-def _filter(time_series, fs, cut=500.):
-    """
-    Low pass filters time series (3rd order Butterworth filter) - used for LFP
+    Low pass filters time series (3rd order Butterworth filter) - (used for LFP)
     :param time_series: time series to analyse
     :param fs: sampling frequency
     :param cut: cut off frequency
     """
 
     b, a = signal.butter(3, cut/(fs/2.), btype="lowpass")
+    return signal.filtfilt(b, a, time_series, axis=0)
+
+
+def bandpass_filter(time_series, fs=1000., cut=np.array([25., 60.])):
+    """
+    Low pass filters time series (3rd order Butterworth filter) - (used for rate)
+    :param time_series: time series to analyse
+    :param fs: sampling frequency
+    :param cut: cut off frequencies
+    """
+
+    b, a = signal.butter(3, cut/(fs/2.), btype="bandpass")
     return signal.filtfilt(b, a, time_series, axis=0)
 
 
@@ -407,7 +235,7 @@ def analyse_estimated_LFP(StateM, subset, slice_idx=[], fs=10000.):
     """
 
     t, LFP = _estimate_LFP(StateM, subset)
-    LFP = _filter(LFP, fs)
+    LFP = lowpass_filter(LFP, fs)
 
     LFPs = []
     if slice_idx:
@@ -415,11 +243,11 @@ def analyse_estimated_LFP(StateM, subset, slice_idx=[], fs=10000.):
             lb = bounds[0]; ub = bounds[1]
             LFPs.append(LFP[np.where((lb <= t) & (t < ub))[0]])
 
-        PSDs = [_calc_spectrum(LFP_tmp, fs, nperseg=2024) for LFP_tmp in LFPs]
+        PSDs = [_calc_spectrum(LFP_tmp, fs, nperseg=1024) for LFP_tmp in LFPs]
         f = PSDs[0][0]
         Pxx = np.array([tmp[1] for tmp in PSDs])
     else:
-        f, Pxx = _calc_spectrum(LFP, fs, nperseg=2024)
+        f, Pxx = _calc_spectrum(LFP, fs, nperseg=2048)
 
     # for comparable results cut spectrum at 500 Hz
     f = np.asarray(f)
