@@ -290,6 +290,22 @@ def save_replay_analysis(replay, replay_results, f_name="replay"):
         pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
+def save_step_sizes(trajectories, step_sizes, avg_step_sizes, gamma_rates, f_name="step_sizes"):
+    """
+    Saves estimated trajectory, calculated step sizes and filtered gamma rate (to correlate with...)
+    :param trajectories: estimated (from posterior matrix) trajectories
+    :param step_sizes: event step sized calculated from estimated trajectories
+    :param avg_step_size: average step sizes calculated from distance and time of trajectories
+    :param gama_rates: gamma freq filtered and sliced PC firing rates
+    """
+
+    results = {"trajectories":trajectories, "step_sizes":step_sizes,
+               "avg_step_sizes":avg_step_sizes, "gamma_rates":gamma_rates}
+    pklf_name = os.path.join(base_path, "files", "step_sizes.pkl")
+    with open(pklf_name, "wb") as f:
+        pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
 def save_wmx(weightmx, pklf_name):
     """
     Saves excitatory weight matrix
@@ -313,6 +329,18 @@ def load_wmx(pklf_name):
         wmx_PC_E = pickle.load(f)
 
     return wmx_PC_E
+
+
+def load_spikes(pklf_name):
+    """
+    Loads in saved spikes from simulations
+    param pklf_name: name of saved file
+    return: spike_times, spiking_neurons, rate
+    """
+
+    with open(pklf_name, "rb") as f:
+        tmp = pickle.load(f)
+    return tmp["spike_times"], tmp["spiking_neurons"], tmp["rate"]
 
 
 def load_spike_trains(npzf_name):

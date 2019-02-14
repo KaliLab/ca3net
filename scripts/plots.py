@@ -104,10 +104,10 @@ def plot_posterior_trajectory(X_posterior, fitted_path, R, fig_name, temporal_re
 
 def plot_step_sizes(gamma_rate, step_sizes, avg_step_size, delta_t, fig_name):
     """
-    Saves figure with step sizes within ML trajectories
+    Saves figure with step sizes within estimated trajectories
     :param gama_rate: gamma freq filtered PC firing rate
-    :param step_sizes: see `analyse_movement.py`
-    :param avg_step_size: theoretical avg. step size
+    :param step_sizes: event step sized calculated from estimated trajectories
+    :param avg_step_size: average step sizes calculated from distance and time of trajectories
     :param delta_t: width of time windows used (only for xlabel)
     :param fig_name: name of saved img
     """
@@ -134,6 +134,31 @@ def plot_step_sizes(gamma_rate, step_sizes, avg_step_size, delta_t, fig_name):
 
     fig.tight_layout()
     fig.align_ylabels([ax, ax2])
+    fig.savefig(fig_name)
+    plt.close(fig)
+
+
+def plot_step_size_distr(step_sizes, avg_step_sizes, fig_name):
+    """
+    Saves figure with observed and predicted step sizes based on estimated trajectories
+    :param step_sizes: event step sized calculated from estimated trajectories
+    :param avg_step_sizes: average step sizes calculated from distance and time of trajectories
+    :param fig_name: name of saved img
+    """
+
+    fig = plt.figure(figsize=(10, 6.5))
+    ax = fig.add_subplot(1, 1, 1)
+    sns.despine()
+
+    sns.distplot(step_sizes, ax=ax, kde=False, rug=False, norm_hist=True,
+                 hist_kws={"color":"black", "alpha":0.8}, label="observed")
+    ax.errorbar(np.mean(avg_step_sizes), 0.5, xerr=np.std(avg_step_sizes), color="red",
+                fmt="o", capthick=2, capsize=5, label="predicted")
+    ax.set_title("Distribution of step sizes")
+    ax.set_xlabel("Step size")
+    ax.set_ylabel("Prob")
+    ax.legend()
+
     fig.savefig(fig_name)
     plt.close(fig)
 
@@ -224,7 +249,7 @@ def plot_TFR(coefs, freqs, title_, fig_name):
     ax.set_title("Wavlet transform of %s"%title_)
     ax.set_xlabel("Time (ms)")
     ax.set_ylabel("Frequency (Hz)")
-    ax.set_yticks(np.arange(0, 200, 20)); ax.set_yticklabels(["%.1f"%i for i in freqs[::20].copy()])
+    ax.set_yticks(np.arange(0, 300, 20)); ax.set_yticklabels(["%.1f"%i for i in freqs[::20].copy()])
 
     fig.savefig(fig_name)
     plt.close(fig)
