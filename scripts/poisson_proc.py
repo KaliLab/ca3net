@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 """
-Functions used for generating hippocampal like spike trains
-Setup: many repetitions on a circular track or linear [0, 2pi] track
+Functions used for generating hippocampal like spike trains (inhomogeneous Poisson process)
+Setup: many repetitions on a circular track or (mapped) linear [0, 2pi] track
 authors: András Ecker, Eszter Vértes, Szabolcs Káli last update: 10.2018
 """
 
@@ -49,8 +49,8 @@ def hom_poisson(lambda_, n_rnds, t_max, seed):
     rnd_isis = _generate_exp_rand_numbers(lambda_, n_rnds, seed)
     poisson_proc = np.cumsum(rnd_isis)
 
+    assert poisson_proc[-1] > t_max, "Spike train is too short, consider increasing `n_rnds`!"
     return poisson_proc[np.where(poisson_proc <= t_max)]
-    #TODO: this doesn't make sure that the Poisson proc is t_max long... but generates longer (based on n_rnds) and deletes the end
 
 
 def get_tuning_curve_circular(spatial_points, phi_start):
@@ -111,7 +111,7 @@ def evaluate_lambda_t(t, phi_start, linear, phase0):
 
 def inhom_poisson(lambda_, t_max, phi_start, linear, seed, phase0=0.0):
     """
-    Generates a homogenous Poisson process and converts it to inhomogenous
+    Generates a homogeneous Poisson process and converts it to inhomogeneous
     via keeping only a subset of spikes based on the (time and space dependent) rate of the place cell (see `evaluate_lambda_t()`)
     :param lambda_: rate of the hom. Poisson process (see `hom_poisson()`)
     :param t_max: length of the generate Poisson process
