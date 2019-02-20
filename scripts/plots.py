@@ -1037,14 +1037,12 @@ def plot_compare_STDP_to_orig(EPSP_changes, orig_data, save_name, orig_exp_fit=N
     fig.savefig(fig_name)
 
 
-def plot_STDP2(STDP_params, sim_exp_fit, mode, save_name):
+def plot_STDP2(STDP_params, sim_exp_fit, save_name):
     """
     Saves plot of the STDP rule used for learning
     exponential STDP: f(s) = A_p * exp(-s/tau_p) (if s > 0), where s=tpost_{spike}-tpre_{spike}
     :param STDP_params: dictionary with taup, taum: time constant of weight change & Ap, Am: max amplitude of weight change (used to specify STDP rule for learning)
     :param sim_exp_fit: same dictionary as above (fitted to EPSP % changes)
-    :param mode: see `plot_STDP_rule()` (used only for ylim and naming)
-    :return mode: just for saving conventions
     """
 
     delta_t = np.linspace(-150, 150, 1000)
@@ -1061,21 +1059,14 @@ def plot_STDP2(STDP_params, sim_exp_fit, mode, save_name):
     ax.set_xlabel("$\Delta t$ /post-pre/ (ms)")
     ax.set_xlim([-150, 150])
     ax.set_ylabel("$\Delta w$ (nS)", color="blue")
-
     ax2 = ax.twinx()
     ax2.plot(delta_t, delta_w_fitted, "g-", linewidth=2, label="fitted 'STDP' taup:%.3f(ms), Ap:%.3f"%(sim_exp_fit["taup"], sim_exp_fit["Ap"]))
     ax2.set_ylabel("Change in EPSP amplitude (%)", color="green")
-
-    if mode == "asym":
-        ax.set_ylim([-1*STDP_params["Ap"]*1.05, STDP_params["Ap"]*1.05])
-        ax2.set_ylim([-1*sim_exp_fit["Ap"]*1.05, sim_exp_fit["Ap"]*1.05])
-    elif mode == "sym":
-        ax.set_ylim([-1*STDP_params["Ap"]*0.05, STDP_params["Ap"]*1.05])
-        ax2.set_ylim([-1*sim_exp_fit["Ap"]*0.05, sim_exp_fit["Ap"]*1.05])
-
+    ax.set_ylim([-1*STDP_params["Ap"]*0.05, STDP_params["Ap"]*1.05])
+    ax2.set_ylim([-1*sim_exp_fit["Ap"]*0.05, sim_exp_fit["Ap"]*1.05])
     h1, l1 = ax.get_legend_handles_labels()
     h2, l2 = ax2.get_legend_handles_labels()
     ax.legend(h1+h2, l1+l2)
 
-    fig_name = os.path.join(fig_dir, "%s_%s.png"%(save_name, mode))
+    fig_name = os.path.join(fig_dir, "%s_sym.png"%save_name)
     fig.savefig(fig_name)
