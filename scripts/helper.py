@@ -12,6 +12,7 @@ from bayesian_decoding import load_tuning_curves, extract_binspikecount, calc_po
 
 base_path = os.path.sep.join(os.path.abspath("__file__").split(os.path.sep)[:-2])
 nPCs = 8000
+nBCs = 150
 Erev_E = 0.0  # mV
 Erev_I = -70.0  # mV
 len_sim = 10000  # ms
@@ -223,7 +224,7 @@ def save_vars(SM, RM, StateM, subset, f_name="sim_vars_PC"):
     spike_times, spiking_neurons, rate = preprocess_monitors(SM, RM, calc_ISI=False)
     PSCs = {}
     for i in subset:
-        v = StateM[i].vm * 1000.  # *1000 mV conversion
+        v = StateM[i].vm * 1000.  # *1000 mV conversion (at the end the results will have Brian2's volt dimension...)
         g_exc = StateM[i].g_ampa# + StateM[i].g_ampaMF  # this is already in nS (see *z in the equations)
         i_exc = -g_exc * (v - Erev_E * np.ones_like(v))  # pA
         g_inh = StateM[i].g_gaba
@@ -389,6 +390,32 @@ def refractoriness(spike_trains, ref_per=5e-3):
     return spike_trains_updated
 
 
+def calc_spiketrain_ISIs():
+    """Calculates inter spike intervals within the generated spike trains (separately for place cells, non-place cells)"""
+
+    # just to get place cell idx
+    pklf_name = os.path.join(base_path, "files", "PFstarts_0.5_linear.pkl")
+    with open(pklf_name, "rb") as f:
+        PFs = pickle.load(f)
+
+    npzf_name = os.path.join(base_path, "files", "spike_trains_0.5_linear.npz")
+    npz_f = np.load(npzf_name)
+    spike_trains = npz_f["spike_trains"]
+
+    place_cell_ISIs = []
+    nplace_cell_ISIs = []
+    for i in range(nPCs):
+        if i in PFs:
+            place_cell_ISIs.extend(np.diff(spike_trains[i]).tolist())
+        else:
+            nplace_cell_ISIs.extend(np.diff(spike_trains[i]).tolist())
+
+    results = {"PCs":np.asarray(place_cell_ISIs), "nPCs":np.asarray(nplace_cell_ISIs)}
+    pklf_name = os.path.join(base_path, "files", "spiketrain_ISIs.pkl")
+    with open(pklf_name, "wb") as f:
+        pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
 def merge_PF_starts():
     """Merges place field starting point generated for 2 different environments"""
 
@@ -416,5 +443,80 @@ def merge_PF_starts():
         pickle.dump(place_fields, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
+def calc_single_cell_rates():
+    """Calculates single cell firing rates for cells (separately for place cells, non-place cells and BCs)"""
+
+    # just to get place cell idx
+    pklf_name = os.path.join(base_path, "files", "PFstarts_0.5_linear.pkl")
+    with open(pklf_name, "rb") as f:
+        PFs = pickle.load(f)
+
+    pklf_name = os.path.join(base_path, "files", "sim_vars_PC.pkl")
+    spike_times, spiking_neurons, _ = load_spikes(pklf_name)
+
+    place_cell_rates = []
+    nplace_cell_rates = []
+    for i in range(nPCs):
+        idx = np.where(spiking_neurons == i)[0]
+        spikes = spike_times[idx]
+        if i in PFs:
+            place_cell_rates.append(len(spikes)/(len_sim/1000.))
+        else:
+            nplace_cell_rates.append(len(spikes)/(len_sim/1000.))
+
+    pklf_name = os.path.join(base_path, "files", "sim_vars_BC.pkl")
+    spike_times, spiking_neurons, _ = load_spikes(pklf_name)
+
+    BC_rates = []
+    for i in range(nBCs):
+        idx = np.where(spiking_neurons == i)[0]
+        spikes = spike_times[idx]
+        BC_rates.append(len(spikes)/(len_sim/1000.))
+
+    results = {"PCs":np.asarray(place_cell_rates), "nPCs":np.asarray(nplace_cell_rates), "BCs":np.asarray(BC_rates)}
+    pklf_name = os.path.join(base_path, "files", "single_cell_rates.pkl")
+    with open(pklf_name, "wb") as f:
+        pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+def calc_ISIs():
+    """Calculates inter spike intervals for cells (separately for place cells, non-place cells and BCs)"""
+
+    # just to get place cell idx
+    pklf_name = os.path.join(base_path, "files", "PFstarts_0.5_linear.pkl")
+    with open(pklf_name, "rb") as f:
+        PFs = pickle.load(f)
+
+    pklf_name = os.path.join(base_path, "files", "sim_vars_PC.pkl")
+    spike_times, spiking_neurons, _ = load_spikes(pklf_name)
+
+    place_cell_ISIs = []
+    nplace_cell_ISIs = []
+    for i in range(nPCs):
+        idx = np.where(spiking_neurons == i)[0]
+        spikes = spike_times[idx]
+        if i in PFs:
+            place_cell_ISIs.extend(np.diff(spikes).tolist())
+        else:
+            nplace_cell_ISIs.extend(np.diff(spikes).tolist())
+
+    pklf_name = os.path.join(base_path, "files", "sim_vars_BC.pkl")
+    spike_times, spiking_neurons, _ = load_spikes(pklf_name)
+
+    BC_ISIs = []
+    for i in range(nBCs):
+        idx = np.where(spiking_neurons == i)[0]
+        spikes = spike_times[idx]
+        BC_ISIs.extend(np.diff(spikes).tolist())
+
+    results = {"PCs":np.asarray(place_cell_ISIs), "nPCs":np.asarray(nplace_cell_ISIs), "BCs":np.asarray(BC_ISIs)}
+    pklf_name = os.path.join(base_path, "files", "ISIs.pkl")
+    with open(pklf_name, "wb") as f:
+        pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
 #if __name__ == "__main__":
+#    calc_spiketrain_ISIs()
 #    merge_PF_starts()
+#    calc_single_cell_rates()
+#    calc_ISIs()
