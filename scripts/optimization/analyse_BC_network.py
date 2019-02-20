@@ -63,7 +63,7 @@ delta_T_BC = 2.21103724225 * mV
 spike_th_BC = theta_BC + 10 * delta_T_BC
 
 
-def run_simulation(exc_rate=2, w_BC_E=3.75, w_BC_I=7.5, delay_BC_I=0.6, decay_BC_I=1.2):
+def run_simulation(exc_rate=2, w_BC_E=2.6, w_BC_I=3.5, delay_BC_I=0.6, decay_BC_I=1.2):
     """
     Sets up the purely inhibitory network with outer input and runs simulation
     :param exc_rate: rate of PC population
@@ -146,12 +146,13 @@ def analyse_results(SM_BC, RM_BC, StateM_BC):
 if __name__ == "__main__":
 
     rate_wE = True
-    rate_wI = False
-    delay_dacay = False
+    rate_wI = True
+    wE_wI = True
+    delay_dacay = true
 
     exc_rates = np.array([1., 1.25, 1.5, 1.75, 2., 2.25, 2.5, 2.75, 3.])
-    ws_BC_I = np.array([7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9])
-    ws_BC_E = np.array([3.55, 3.6, 3.65, 3.7, 3.75, 3.8, 3.85, 3.9, 3.95])
+    ws_BC_I = np.array([3.3, 3.35, 3.4, 3.45, 3.5, 3.55, 3.6, 3.65, 3.7])
+    ws_BC_E = np.array([2.4, 2.45, 2.5, 2.55, 2.6, 2.65, 2.7, 2.75, 2.8])
     delays_BC_I = np.array([0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8])
     decays_BC_I = np.array([1., 1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4])
 
@@ -196,6 +197,27 @@ if __name__ == "__main__":
         xlabel = "BC-BC weight (ns)"; ylabel = "PC population rate (Hz)"
         plot_summary_BC(freqs, powers, xlabel=xlabel, xticklabels=ws_BC_I,
                         ylabel=ylabel, yticklabels=exc_rates, save_name="BC_rate_wI")
+
+    if wE_wI:
+
+        freqs = np.zeros((len(ws_BC_E), len(ws_BC_I)))
+        powers = np.zeros((len(ws_BC_E), len(ws_BC_I)))
+        for k, w_BC_E in enumerate(ws_BC_E):
+            for h, w_BC_I in enumerate(ws_BC_I):
+                print "wE:%.2f, wI:%.2f"%(w_BC_E, w_BC_I)
+                SM_BC, RM_BC, StateM_BC = run_simulation(exc_rate=2.5, w_BC_E=w_BC_E, w_BC_I=w_BC_I)
+                freq, power = analyse_results(SM_BC, RM_BC, StateM_BC)
+                freqs[k, h] = freq; powers[k, h] = power
+                del SM_BC; del RM_BC; del StateM_BC; plt.close("all")
+
+        results = {"freqs":freqs, "powers":powers}
+        pklf_name = os.path.join(base_path, "files", "results", "BC_network_wE_wI.pkl")
+        with open(pklf_name, "wb") as f:
+            pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+        xlabel = "BC-BC weight (ns)"; ylabel = "PC-BC weight (ns)"
+        plot_summary_BC(freqs, powers, xlabel=xlabel, xticklabels=ws_BC_I,
+                        ylabel=ylabel, yticklabels=ws_BC_E, save_name="BC_wE_wI")
 
     if delay_dacay:
 
