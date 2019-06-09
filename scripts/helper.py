@@ -6,17 +6,19 @@ author: András Ecker, last update: 02.2019
 
 import os, pickle
 import numpy as np
+import pywt
 from tqdm import tqdm  # progress bar
+from brian2.units import *
 from bayesian_decoding import load_tuning_curves, extract_binspikecount, calc_posterior, fit_trajectory, test_significance
 
 
 base_path = os.path.sep.join(os.path.abspath("__file__").split(os.path.sep)[:-2])
 nPCs = 8000
 nBCs = 150
-Erev_E = 0.0  # mV
-Erev_I = -70.0  # mV
+Erev_E = 0.0*mV
+Erev_I = -70.0*mV
 len_sim = 10000  # ms
-volume_cond = 1 / 3.54  # S/m
+volume_cond = 1e9*nS / 3.54e5  # 1/3.54 S/m (`_estimate_LFP()` assumes 10 um distance...)
 
 
 # ========== process Brian2 monitors ==========
@@ -48,26 +50,26 @@ def preprocess_monitors(SM, RM, calc_ISI=True):
 
 def _estimate_LFP(StateM, subset):
     """
-    Estimates LFP by summing synaptic currents to PCs (assuming that all neurons are at equal distance (1 um) from the electrode)
+    Estimates LFP by summing synaptic currents to PCs (assuming that all neurons are at equal distance (10 um) from the electrode)
     :param StateM: Brian2 StateMonitor object (of the PC population)
     :param subset: IDs of the recorded neurons
     :return: t, LFP: estimated LFP (in uV) and corresponding time points (in ms)
     """
 
     t = StateM.t_ * 1000.  # *1000 ms conversion
-    LFP = np.zeros_like(t)
+    LFP = np.zeros_like(t)*pA
 
     for i in subset:
-        v = StateM[i].vm * 1000. # *1000 mV conversion
-        g_exc = StateM[i].g_ampa + StateM[i].g_ampaMF  # this is already in nS (see *z in the equations)
-        i_exc = g_exc * (v - Erev_E * np.ones_like(v))  # pA
-        g_inh = StateM[i].g_gaba
-        i_inh = g_inh * (v - Erev_I * np.ones_like(v))  # pA
+        v = StateM[i].vm
+        g_exc = StateM[i].g_ampa*nS + StateM[i].g_ampaMF*nS
+        i_exc = g_exc * (v - (Erev_E * np.ones_like(v/mV)))  # pA
+        g_inh = StateM[i].g_gaba*nS
+        i_inh = g_inh * (v - (Erev_I * np.ones_like(v/mV)))  # pA
         LFP += -(i_exc + i_inh)  # (this is still in pA)
 
-    LFP *= 1 / (4 * np.pi * volume_cond * 1e6)  # uV (*1e-6 um conversion)
+    LFP *= 1 / (4 * np.pi * volume_cond)
 
-    return t, LFP
+    return t, LFP/mV
 
 
 # ========== replay detection ==========
@@ -213,26 +215,27 @@ def save_place_fields(place_cells, phi_starts, pklf_name):
         pickle.dump(place_fields, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def save_vars(SM, RM, StateM, subset, f_name="sim_vars_PC"):
+def save_vars(SM, RM, StateM, subset, seed, f_name="sim_vars_PC"):
     """
     Saves PC pop spikes, firing rate and PSCs from a couple of recorded neurons after the simulation
     :param SM, RM: Brian2 SpikeMonitor, PopulationRateMonitor and StateMonitor
     :param subset: IDs of the recorded neurons
+    :param seed: random seed used to run the simulation
     :param f_name: name of saved file
     """
 
     spike_times, spiking_neurons, rate = preprocess_monitors(SM, RM, calc_ISI=False)
     PSCs = {}
     for i in subset:
-        v = StateM[i].vm * 1000.  # *1000 mV conversion (at the end the results will have Brian2's volt dimension...)
-        g_exc = StateM[i].g_ampa# + StateM[i].g_ampaMF  # this is already in nS (see *z in the equations)
-        i_exc = -g_exc * (v - Erev_E * np.ones_like(v))  # pA
-        g_inh = StateM[i].g_gaba
-        i_inh = -g_inh * (v - Erev_I * np.ones_like(v))  # pA
+        v = StateM[i].vm
+        g_exc = StateM[i].g_ampa*nS# + StateM[i].g_ampaMF*nS
+        i_exc = -g_exc * (v - (Erev_E * np.ones_like(v/mV)))  # pA
+        g_inh = StateM[i].g_gaba*nS
+        i_inh = -g_inh * (v - (Erev_I * np.ones_like(v/mV)))  # pA
         PSCs[i] = {"i_exc": i_exc, "i_inh":i_inh}
     PSCs["t"] = StateM.t_ * 1000.  # *1000 ms conversion
 
-    results = {"spike_times":spike_times, "spiking_neurons":spiking_neurons, "rate":rate, "PSCs":PSCs}
+    results = {"spike_times":spike_times, "spiking_neurons":spiking_neurons, "rate":rate, "PSCs":PSCs, "seed":seed}
     pklf_name = os.path.join(base_path, "files", "%s.pkl"%f_name)
     with open(pklf_name, "wb") as f:
         pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
@@ -291,18 +294,34 @@ def save_replay_analysis(replay, replay_results, f_name="replay"):
         pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def save_step_sizes(trajectories, step_sizes, avg_step_sizes, gamma_rates, f_name="step_sizes"):
+def save_step_sizes(trajectories, step_sizes, avg_step_sizes, gamma_filtered_LFPs, f_name="step_sizes"):
     """
-    Saves estimated trajectory, calculated step sizes and filtered gamma rate (to correlate with...)
+    Saves estimated trajectory, calculated step sizes and slow gamma filtered LFP
     :param trajectories: estimated (from posterior matrix) trajectories
-    :param step_sizes: event step sized calculated from estimated trajectories
+    :param step_sizes: event step sizes calculated from estimated trajectories
     :param avg_step_size: average step sizes calculated from distance and time of trajectories
-    :param gama_rates: gamma freq filtered and sliced PC firing rates
+    :param gamma_filtered_LFPs: gamma freq filtered and sliced LFP
     """
 
     results = {"trajectories":trajectories, "step_sizes":step_sizes,
-               "avg_step_sizes":avg_step_sizes, "gamma_rates":gamma_rates}
-    pklf_name = os.path.join(base_path, "files", "step_sizes.pkl")
+               "avg_step_sizes":avg_step_sizes, "gamma_filtered_LFPs":gamma_filtered_LFPs}
+    pklf_name = os.path.join(base_path, "files", "%s.pkl"%f_name)
+    with open(pklf_name, "wb") as f:
+        pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+def save_gavg_step_sizes(step_sizes, phases, avg_step_sizes, seeds, f_name="gavg_step_sizes"):
+    """
+    Saves estimated step sizes and phases from sims with multiple seeds
+    :param step_sizes: event step sizes calculated from estimated trajectories
+    :param phases: calculated phases for every step size
+    :param avg_step_size: average step sizes calculated from distance and time of trajectories
+    :param seeds: seeds of different sims
+    """
+
+    results = {"step_sizes":step_sizes, "phases":phases,
+               "avg_step_sizes":avg_step_sizes, "seeds":seeds}
+    pklf_name = os.path.join(base_path, "files", "%s.pkl"%f_name)
     with open(pklf_name, "wb") as f:
         pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -344,6 +363,18 @@ def load_spikes(pklf_name):
     return tmp["spike_times"], tmp["spiking_neurons"], tmp["rate"]
 
 
+def load_LFP(pklf_name):
+    """
+    Loads in saved LFP from simulations
+    param pklf_name: name of saved file
+    return: t, LFP
+    """
+
+    with open(pklf_name, "rb") as f:
+        tmp = pickle.load(f)
+    return tmp["t"], tmp["LFP"]
+
+
 def load_spike_trains(npzf_name):
     """
     Loads in spike trains and converts it to 2 np.arrays for Brian2's SpikeGeneratorGroup
@@ -365,6 +396,19 @@ def load_spike_trains(npzf_name):
 
 
 # ========== misc. ==========
+
+
+def argmin_time_arrays(time_short, time_long):
+    """
+    Finds closest elements in differently sampled time arrays (used for step size analysis...)
+    TODO: add some error managements here....
+    :param time_short: time array with less elements
+    :param time_long: time array with more elements (in the same range)
+    :return: idx of long array, to get closest elements to short array
+    """
+
+    return [np.argmin(np.abs(time_long-t)) for t in time_short]
+
 
 def refractoriness(spike_trains, ref_per=5e-3):
     """
@@ -416,6 +460,7 @@ def calc_spiketrain_ISIs():
         pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
+# not used in the final version...
 def merge_PF_starts():
     """Merges place field starting point generated for 2 different environments"""
 
@@ -515,8 +560,25 @@ def calc_ISIs():
         pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
+def calc_LFP_TFR():
+    """Calculates TFR of the full LFP (not sliced, not downsampled)"""
+
+    pklf_name = os.path.join(base_path, "files", "LFP_12345.pkl")
+    t, LFP = load_LFP(pklf_name)
+    fs = 10000.
+
+    scales = np.concatenate((np.linspace(25, 80, 250), np.linspace(80, 300, 250)[1:]))  # 27-325 Hz  pywt.scale2frequency("morl", scale) / (1/fs)
+    coefs, freqs = pywt.cwt(LFP, scales, "morl", 1/fs)
+
+    results = {"coefs":coefs, "freqs":freqs}
+    pklf_name = os.path.join(base_path, "files", "LFP_TFR.pkl")
+    with open(pklf_name, "wb") as f:
+        pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
 #if __name__ == "__main__":
 #    calc_spiketrain_ISIs()
 #    merge_PF_starts()
 #    calc_single_cell_rates()
 #    calc_ISIs()
+#    calc_LFP_TFR()

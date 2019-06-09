@@ -88,7 +88,7 @@ def plot_posterior_trajectory(X_posterior, fitted_path, R, fig_name, temporal_re
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(1, 1, 1)
 
-    i = ax.imshow(X_posterior, cmap=plt.get_cmap("jet"), aspect="auto", interpolation="nearest", origin="lower")
+    i = ax.imshow(X_posterior, cmap="hot", aspect="auto", interpolation="hermite", origin="lower")
     fig.colorbar(i)
     ax.autoscale(False)
     ax.plot(fitted_path-3, color="white", lw=2)
@@ -102,70 +102,9 @@ def plot_posterior_trajectory(X_posterior, fitted_path, R, fig_name, temporal_re
     plt.close(fig)
 
 
-def plot_step_sizes(gamma_rate, step_sizes, avg_step_size, delta_t, fig_name):
-    """
-    Saves figure with step sizes within estimated trajectories
-    :param gama_rate: gamma freq filtered PC firing rate
-    :param step_sizes: event step sized calculated from estimated trajectories
-    :param avg_step_size: average step sizes calculated from distance and time of trajectories
-    :param delta_t: width of time windows used (only for xlabel)
-    :param fig_name: name of saved img
-    """
-
-    fig = plt.figure(figsize=(10, 6.5))
-    ax = fig.add_subplot(2, 1, 1)
-
-    t_gamma = np.linspace(0, len(gamma_rate), len(gamma_rate))
-    ax.plot(t_gamma, gamma_rate, color="blue")
-    ax.set_title("Background gamma")
-    ax.set_xlim([0, t_gamma[-1]])
-    ax.set_ylabel("PC rate in the gamma band")
-    ax.set_yticks([]); ax.set_yticklabels([])
-
-    t = np.linspace(delta_t/2, len(gamma_rate)-delta_t/2, len(step_sizes))
-    ax2 = fig.add_subplot(2, 1, 2)
-    sns.despine()
-    ax2.axhline(avg_step_size, color="gray", ls="--", zorder=1)
-    ax2.plot(t, step_sizes, "k-", lw=1.5, zorder=1)
-    ax2.scatter(t, step_sizes, color="red", zorder=2)
-    ax2.set_title("Relative movement based on MLE trajectory")
-    ax2.set_xlim([0, t_gamma[-1]]); ax2.set_xlabel("Time (ms)")
-    ax2.set_ylabel("(Relative) Movement")
-
-    fig.tight_layout()
-    fig.align_ylabels([ax, ax2])
-    fig.savefig(fig_name)
-    plt.close(fig)
-
-
-def plot_step_size_distr(step_sizes, avg_step_sizes, fig_name):
-    """
-    Saves figure with observed and predicted step sizes based on estimated trajectories
-    :param step_sizes: event step sized calculated from estimated trajectories
-    :param avg_step_sizes: average step sizes calculated from distance and time of trajectories
-    :param fig_name: name of saved img
-    """
-
-    fig = plt.figure(figsize=(10, 6.5))
-    ax = fig.add_subplot(1, 1, 1)
-    sns.despine()
-
-    sns.distplot(step_sizes, ax=ax, kde=False, rug=False, norm_hist=True,
-                 hist_kws={"color":"black", "alpha":0.8}, label="observed")
-    ax.errorbar(np.mean(avg_step_sizes), 0.5, xerr=np.std(avg_step_sizes), color="red",
-                fmt="o", capthick=2, capsize=5, label="predicted")
-    ax.set_title("Distribution of step sizes")
-    ax.set_xlabel("Step size")
-    ax.set_ylabel("Prob")
-    ax.legend()
-
-    fig.savefig(fig_name)
-    plt.close(fig)
-
-
 def plot_PSD(rate, rate_ac, f, Pxx, title_, color_, multiplier_):
     """
-    Saves figure with rate, autocorrelation plot, PSD and optionally TFR
+    Saves figure with rate, its autocorrelation and PSD
     :param rate: firing rate - precalculated by `detect_oscillation.py/preprocess_spikes()`
     :param rate_ac: autocorrelation function of the rate (see `detect_oscillation.py/analyse_rate()`)
     :param f, Pxx: estimated PSD and frequencies used (see `detect_oscillation.py/analyse_rate()`)
@@ -244,7 +183,8 @@ def plot_TFR(coefs, freqs, title_, fig_name):
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(1, 1, 1)
 
-    i = ax.imshow((np.abs(coefs))**2, cmap=plt.get_cmap("jet"), aspect="auto", interpolation=None)
+    i = ax.imshow(np.abs(coefs), cmap=plt.get_cmap("jet"), aspect="auto", interpolation=None,
+                  vmax=np.max(np.abs(coefs)), vmin=np.max(-np.abs(coefs)))
     fig.colorbar(i)
     ax.set_title("Wavlet transform of %s"%title_)
     ax.set_xlabel("Time (ms)")
@@ -452,7 +392,7 @@ def plot_LFP(t, LFP, f, Pxx, multiplier_):
     ax.set_title("Estimated LFP")
     ax.set_xlabel("Time (ms)")
     ax.set_xlim([t[0], t[-1]])
-    ax.set_ylabel('"LFP ($\mu V$)" - currents summed from 400 PCs')
+    ax.set_ylabel('"LFP (mV)" - currents summed from 400 PCs')
 
     ax2 = fig.add_subplot(gs[1])
     try:
@@ -473,6 +413,87 @@ def plot_LFP(t, LFP, f, Pxx, multiplier_):
     fig.tight_layout()
     fig_name = os.path.join(fig_dir, "%.2f_LFP.png"%multiplier_)
     fig.savefig(fig_name)
+
+
+def plot_step_sizes(gamma_LFP, step_sizes, avg_step_size, delta_t, fig_name):
+    """
+    Saves figure with step sizes within estimated trajectories
+    :param gama_rate: gamma freq filtered LFP
+    :param step_sizes: event step sized calculated from estimated trajectories
+    :param avg_step_size: average step sizes calculated from distance and time of trajectories
+    :param delta_t: width of time windows used (only for xlabel)
+    :param fig_name: name of saved img
+    """
+
+    fig = plt.figure(figsize=(10, 6.5))
+    ax = fig.add_subplot(2, 1, 1)
+
+    t_end = len(gamma_LFP)/10.  # hard coded for 10 kHz sampling rate...
+    t_gamma = np.linspace(0, t_end, len(gamma_LFP))
+    ax.plot(t_gamma, gamma_LFP, color="blue")
+    ax.set_title("Background gamma")
+    ax.set_xlim([0, t_end])
+    ax.set_ylabel("PC rate in the gamma band")
+    #ax.set_yticks([]); ax.set_yticklabels([])
+
+    t = np.linspace(delta_t/2, t_end-delta_t/2, len(step_sizes))
+    ax2 = fig.add_subplot(2, 1, 2)
+    sns.despine()
+    ax2.axhline(avg_step_size, color="gray", ls="--", zorder=1)
+    ax2.plot(t, step_sizes, "k-", lw=1.5, zorder=1)
+    ax2.scatter(t, step_sizes, color="red", zorder=2)
+    ax2.set_title("Relative movement based on MLE trajectory")
+    ax2.set_xlim([0, t_end]); ax2.set_xlabel("Time (ms)")
+    ax2.set_ylabel("(Relative) Movement")
+
+    fig.tight_layout()
+    fig.align_ylabels([ax, ax2])
+    fig.savefig(fig_name)
+    plt.close(fig)
+
+
+def plot_step_size_distr(step_sizes, avg_step_sizes, fig_name):
+    """
+    Saves figure with observed and predicted step sizes based on estimated trajectories
+    :param step_sizes: event step sized calculated from estimated trajectories
+    :param avg_step_sizes: average step sizes calculated from distance and time of trajectories
+    :param fig_name: name of saved img
+    """
+
+    fig = plt.figure(figsize=(10, 6.5))
+    ax = fig.add_subplot(1, 1, 1)
+    sns.despine()
+
+    sns.distplot(step_sizes, ax=ax, kde=False, rug=False, norm_hist=True,
+                 hist_kws={"color":"black", "alpha":0.8}, label="observed")
+    ax.errorbar(np.mean(avg_step_sizes), 0.5, xerr=np.std(avg_step_sizes), color="red",
+                fmt="o", capthick=2, capsize=5, label="predicted")
+    ax.set_title("Distribution of step sizes")
+    ax.set_xlabel("Step size")
+    ax.set_ylabel("Prob")
+    ax.legend()
+
+    fig.savefig(fig_name)
+    plt.close(fig)
+
+
+def plot_step_size_phases(all_step_sizes, corresponding_phases, fig_name):
+    """
+    Plots 2D hist of step sizes and corresponding phases
+    :params all_step_sizes, corresponding_phases: step sizes and corresponding_phases
+    :param fig_name: name of saved img
+    """
+
+    fig = plt.figure(figsize=(9, 8))
+    ax = fig.add_subplot(1, 1, 1)
+    i = ax.hexbin(corresponding_phases, all_step_sizes, gridsize=10, cmap="gray_r")
+    fig.colorbar(i)
+    ax.set_title("Slow gamma phase of step sizes")
+    ax.set_xlabel("Phase (rad)")
+    ax.set_ylabel("Step size")
+
+    fig.savefig(fig_name)
+    plt.close(fig)
 
 
 def plot_STDP_rule(taup, taum, Ap, Am, save_name):
@@ -515,8 +536,7 @@ def plot_wmx(wmx, save_name):
 
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(1, 1, 1)
-    i = ax.imshow(wmx*1e9, cmap=plt.get_cmap("jet"), origin="lower")  # nS conversion
-    i.set_interpolation("nearest")  # set to "None" to less pixels and smooth, nicer figure
+    i = ax.imshow(wmx*1e9, cmap="cividis", origin="lower", interpolation="nearest")  # nS conversion
     fig.colorbar(i)
     ax.set_title("Learned synaptic weights (nS)")
     ax.set_xlabel("Target neuron")
@@ -546,8 +566,7 @@ def plot_wmx_avg(wmx, n_pops, save_name):
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(1, 1, 1)
 
-    i = ax.imshow(mean_wmx*1e9, cmap=plt.get_cmap("jet"), origin="lower")  # nS conversion
-    i.set_interpolation("nearest")  # set to "None" to less pixels and smooth, nicer figure
+    i = ax.imshow(mean_wmx*1e9, cmap="cividis", origin="lower", interpolation="nearest")
     fig.colorbar(i)
     ax.set_title("Learned avg. synaptic weights (nS)")
     ax.set_xlabel("Target neuron")

@@ -85,6 +85,7 @@ def calc_TFR(rate, fs, slice_idx=[]):
     """
 
     scales = np.linspace(3.5, 5, 300)  # 162-232 Hz  pywt.scale2frequency("morl", scale) / (1/fs)
+    #scales = np.concatenate((np.linspace(25, 80, 150), np.linspace(80, 300, 150)[1:])) # 27-325 Hz for 10 kHz sampled LFP...
 
     if slice_idx:
         t = np.arange(0, 10000); rates = []
@@ -202,26 +203,39 @@ def gamma(f, Pxx, slice_idx=[], p_th=0.05):
 
 def lowpass_filter(time_series, fs=10000., cut=500.):
     """
-    Low pass filters time series (3rd order Butterworth filter) - (used for LFP)
+    Low-pass filters time series (3rd order Butterworth filter) - (used for LFP)
     :param time_series: time series to analyse
     :param fs: sampling frequency
     :param cut: cut off frequency
+    :return: filtered time_series
     """
 
     b, a = signal.butter(3, cut/(fs/2.), btype="lowpass")
     return signal.filtfilt(b, a, time_series, axis=0)
 
 
-def bandpass_filter(time_series, fs=1000., cut=np.array([25., 60.])):
+def bandpass_filter(time_series, fs=10000., cut=np.array([25., 60.])):
     """
-    Low pass filters time series (3rd order Butterworth filter) - (used for rate)
+    Band-pass filters time series (3rd order Butterworth filter) - (used for LFP)
     :param time_series: time series to analyse
     :param fs: sampling frequency
     :param cut: cut off frequencies
+    :return: filtered time_series
     """
 
     b, a = signal.butter(3, cut/(fs/2.), btype="bandpass")
     return signal.filtfilt(b, a, time_series, axis=0)
+
+
+def calc_phase(time_series):
+    """
+    Gets phase of the signal from the Hilbert transform
+    :param time_series: time series to analyse
+    :return: exctracted phase of the time_series
+    """
+
+    z = signal.hilbert(time_series)
+    return np.angle(z)
 
 
 def analyse_estimated_LFP(StateM, subset, slice_idx=[], fs=10000.):
