@@ -200,17 +200,78 @@ def replay_circular(ISI_hist, th=0.7):
     return replay, avg_replay_interval
 
 
+# ========== 2 environments ==========
+
+
+# not used in the final version...
+def merge_PF_starts():
+    """Merges place field starting point generated for 2 different environments"""
+
+    pklf_name = os.path.join(base_path, "files", "PFstarts_0.5_linear.pkl")
+    with open(pklf_name, "rb") as f:
+        place_fields = pickle.load(f)
+
+    pklf_name = os.path.join(base_path, "files", "PFstarts_0.5_linear_no.pkl")
+    with open(pklf_name, "rb") as f:
+        place_fields_no = pickle.load(f)
+
+    n = 0
+    for i, PF_start_no in place_fields_no.iteritems():
+        if i in place_fields:
+            PF_start = place_fields[i]
+            place_fields[i] = [PF_start, PF_start_no]
+            n += 1
+        else:
+            place_fields[i] = PF_start_no
+
+    print "%i cells have place fields in both envs."%n
+
+    pklf_name = os.path.join(base_path, "files", "PFstarts_0.5_2envs_linear.pkl")
+    with open(pklf_name, "wb") as f:
+        pickle.dump(place_fields, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+def reorder_spiking_neurons(spiking_neurons, pklf_name_tuning_curves):
+    """
+    Reorders spiking neurons based on the intermediate (non-ordered) place fields
+    :param spiking_neurons: list of spiking neurons (ordered)
+    :param pklf_name_tuning_curves: file name of the tuning curves (in the non-ordered env.) - used only for idx
+    :return: reordered_spiking_neurons: same spiking neurons list with neuron idx swapped to the non-ordered env. ones
+    """
+
+    with open(pklf_name_tuning_curves, "rb") as f:
+        place_fields = pickle.load(f)
+
+    PF_idx = np.asarray(place_fields.keys())
+    PF_starts = np.asarray(place_fields.values())
+    sort_idx = np.argsort(PF_starts, kind="mergesort")
+    sorted_PF_idx = PF_idx[sort_idx]
+
+    id_map = {}
+    for i, neuron_id in enumerate(sorted_PF_idx):
+        id_map[neuron_id] = PF_idx[i]
+    assert np.sum(id_map.keys()) == np.sum(id_map.values())
+
+    reordered_spiking_neurons = []
+    for neuron_id in spiking_neurons:
+        if neuron_id in id_map:
+            reordered_spiking_neurons.append(id_map[neuron_id])
+        else:
+            reordered_spiking_neurons.append(neuron_id)
+
+    return np.asarray(reordered_spiking_neurons)
+
+
 # ========== saving & loading ==========
 
-def save_place_fields(place_cells, phi_starts, pklf_name):
+
+def save_place_fields(place_fields, pklf_name):
     """
     Save place field starts and corresponding neuron IDs for further analysis (see `bayesian_decoding.py`)
-    :param place_cells: list of place cell IDs
-    :param phi_starts: corresponding list of the starting degree of place fileds
+    :param place_fields: dict: neuron id:place field start
     :param pklf_name: name of saved file
     """
 
-    place_fields = {neuron_id:phi_starts[i] for i, neuron_id in enumerate(place_cells)}
     with open(pklf_name, "wb") as f:
         pickle.dump(place_fields, f, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -232,7 +293,7 @@ def save_vars(SM, RM, StateM, subset, seed, f_name="sim_vars_PC"):
         i_exc = -g_exc * (v - (Erev_E * np.ones_like(v/mV)))  # pA
         g_inh = StateM[i].g_gaba*nS
         i_inh = -g_inh * (v - (Erev_I * np.ones_like(v/mV)))  # pA
-        PSCs[i] = {"i_exc": i_exc, "i_inh":i_inh}
+        PSCs[i] = {"i_exc": i_exc/pA, "i_inh":i_inh/pA}
     PSCs["t"] = StateM.t_ * 1000.  # *1000 ms conversion
 
     results = {"spike_times":spike_times, "spiking_neurons":spiking_neurons, "rate":rate, "PSCs":PSCs, "seed":seed}
@@ -460,34 +521,6 @@ def calc_spiketrain_ISIs():
         pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-# not used in the final version...
-def merge_PF_starts():
-    """Merges place field starting point generated for 2 different environments"""
-
-    pklf_name = os.path.join(base_path, "files", "PFstarts_0.5_linear.pkl")
-    with open(pklf_name, "rb") as f:
-        place_fields = pickle.load(f)
-
-    pklf_name = os.path.join(base_path, "files", "PFstarts_0.5_linear_no.pkl")
-    with open(pklf_name, "rb") as f:
-        place_fields_no = pickle.load(f)
-
-    n = 0
-    for i, PF_start_no in place_fields_no.iteritems():
-        if i in place_fields:
-            PF_start = place_fields[i]
-            place_fields[i] = [PF_start, PF_start_no]
-            n += 1
-        else:
-            place_fields[i] = PF_start_no
-
-    print "%i cells have place fields in both envs."%n
-
-    pklf_name = os.path.join(base_path, "files", "PFstarts_0.5_2envs_linear.pkl")
-    with open(pklf_name, "wb") as f:
-        pickle.dump(place_fields, f, protocol=pickle.HIGHEST_PROTOCOL)
-
-
 def calc_single_cell_rates():
     """Calculates single cell firing rates for cells (separately for place cells, non-place cells and BCs)"""
 
@@ -563,7 +596,7 @@ def calc_ISIs():
 def calc_LFP_TFR():
     """Calculates TFR of the full LFP (not sliced, not downsampled)"""
 
-    pklf_name = os.path.join(base_path, "files", "LFP_12345.pkl")
+    pklf_name = os.path.join(base_path, "files", "LFP.pkl")
     t, LFP = load_LFP(pklf_name)
     fs = 10000.
 
@@ -578,7 +611,6 @@ def calc_LFP_TFR():
 
 #if __name__ == "__main__":
 #    calc_spiketrain_ISIs()
-#    merge_PF_starts()
 #    calc_single_cell_rates()
 #    calc_ISIs()
 #    calc_LFP_TFR()

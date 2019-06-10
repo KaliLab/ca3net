@@ -30,11 +30,11 @@ def generate_spike_train(n_neurons, place_cell_ratio, linear, ordered=True, seed
     :return: spike_trains - list of lists with indiviual neuron's spikes
     """
 
-    np.random.seed(seed)
-    pyrandom.seed(seed)
-
     # generate random neuronIDs being place cells and starting points for place fields
     if ordered:
+        np.random.seed(seed)
+        pyrandom.seed(seed)
+
         place_cells = np.sort(pyrandom.sample(range(0, n_neurons), int(n_neurons*place_cell_ratio)), kind="mergesort")
         phi_starts = np.sort(np.random.rand(n_neurons), kind="mergesort")[place_cells] * 2*np.pi
 
@@ -43,24 +43,28 @@ def generate_spike_train(n_neurons, place_cell_ratio, linear, ordered=True, seed
         else:
             phi_starts -= 0.1*np.pi  # shift half a PF against boundary effects (mid_PFs will be in [0, 2*np.pi]...)
             pklf_name = os.path.join(base_path, "files", "PFstarts_%s_linear.pkl"%place_cell_ratio)
-        save_place_fields(place_cells, phi_starts, pklf_name)
+
     else:
+        np.random.seed(seed+1)
+        pyrandom.seed(seed+1)
+
         place_cells = pyrandom.sample(range(0, n_neurons), int(n_neurons*place_cell_ratio))
-        phi_starts = np.random.rand(n_neurons)[place_cells] * 2*np.pi
+        phi_starts = np.sort(np.random.rand(n_neurons)[place_cells], kind="mergesort") * 2*np.pi
 
         if not linear:
             pklf_name = os.path.join(base_path, "files", "PFstarts_%s_no.pkl"%place_cell_ratio)
         else:
             phi_starts -= 0.1*np.pi  # shift half a PF against boundary effects (mid_PFs will be in [0, 2*np.pi]...)
             pklf_name = os.path.join(base_path, "files", "PFstarts_%s_linear_no.pkl"%place_cell_ratio)
-        save_place_fields(place_cells, phi_starts, pklf_name)
+
+    place_fields = {neuron_id:phi_starts[i] for i, neuron_id in enumerate(place_cells)}
+    save_place_fields(place_fields, pklf_name)
 
     # generate spike trains
-    spike_trains = []; i = 0
+    spike_trains = []
     for neuron_id in tqdm(range(0, n_neurons)):
-        if neuron_id in place_cells:
-            spike_train = inhom_poisson(infield_rate, t_max, phi_starts[i], linear, seed)
-            i += 1
+        if neuron_id in place_fields:
+            spike_train = inhom_poisson(infield_rate, t_max, place_fields[neuron_id], linear, seed)
         else:
             spike_train = hom_poisson(outfield_rate, 100, t_max, seed)
         spike_trains.append(spike_train)
@@ -75,8 +79,8 @@ if __name__ == "__main__":
     place_cell_ratio = 0.5
     linear = True
 
-    f_out = "spike_trains_%.1f_linear.npz"%place_cell_ratio if linear else "spike_trains_%.1f.npz"%place_cell_ratio; ordered = True
-    #f_out = "intermediate_spike_trains_%.1f_linear.npz"%place_cell_ratio if linear else "intermediate_spike_trains_%.1f.npz"%place_cell_ratio; ordered = False
+    #f_out = "spike_trains_%.1f_linear.npz"%place_cell_ratio if linear else "spike_trains_%.1f.npz"%place_cell_ratio; ordered = True
+    f_out = "intermediate_spike_trains_%.1f_linear.npz"%place_cell_ratio if linear else "intermediate_spike_trains_%.1f.npz"%place_cell_ratio; ordered = False
 
     spike_trains = generate_spike_train(n_neurons, place_cell_ratio, linear=linear, ordered=ordered)
     spike_trains = refractoriness(spike_trains)  # clean spike train (based on refractory period)
