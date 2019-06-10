@@ -31,6 +31,21 @@ def shuffle(wmx_orig):
     return wmx_modified
 
 
+def column_shuffle(wmx_orig):
+    """
+    Randomly shuffles the rows of the weight matrix (keeps weight distribution in single postsyn. neuron level, but no spatial pattern)
+    :param wmx_orig: original weight matrix
+    :return: wmx_modified: modified weight matrix
+    """
+
+    np.random.seed(12345)
+
+    wmx_modified = wmx_orig  # stupid numpy...
+    np.random.shuffle(wmx_modified)  # transpose and shuffle rows -> shuffle columns
+
+    return wmx_modified.T
+
+
 def binarize(wmx_orig, ratio=0.04):
     """
     Makes the matrix binary by averaging the highest x and the lowest 1-x part of the nonzero weights
@@ -108,7 +123,7 @@ if __name__ == "__main__":
     try:
         STDP_mode = sys.argv[1]
     except:
-        STDP_mode = "asym"
+        STDP_mode = "sym"
     assert STDP_mode in ["sym", "asym"]
 
     place_cell_ratio = 0.5
@@ -118,7 +133,8 @@ if __name__ == "__main__":
     pklf_name = os.path.join(base_path, "files", f_in)
     wmx_orig = load_wmx(pklf_name)
 
-    wmx_modified = shuffle(wmx_orig); f_out = "%s_shuffled_linear.pkl"%f_in[:-11] if linear else "%s_shuffled.pkl"%f_in[:-4]
+    #wmx_modified = shuffle(wmx_orig); f_out = "%s_shuffled_linear.pkl"%f_in[:-11] if linear else "%s_shuffled.pkl"%f_in[:-4]
+    wmx_modified = column_shuffle(wmx_orig); f_out = "%s_cshuffled_linear.pkl"%f_in[:-11] if linear else "%s_cshuffled.pkl"%f_in[:-4]
     #wmx_modified = binarize(wmx_orig); f_out = "%s_binary_linear.pkl"%f_in[:-11] if linear else "%s_binary.pkl"%f_in[:-4]
     #wmx_modified = shuffle_blocks(wmx_orig); f_out = "%s_block_shuffled_linear.pkl"%f_in[:-11] if linear else "%s_block_shuffled.pkl"%f_in[:-4]
 
