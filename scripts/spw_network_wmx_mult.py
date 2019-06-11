@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 """
 Looped version of `spw_network.py` -> checks the dynamics for different multipliers of the learned weight matrix
-author: András Ecker last update: 02.2019
+author: András Ecker last update: 06.2019
 """
 
 import os, sys
@@ -29,14 +29,13 @@ if __name__ == "__main__":
 
     place_cell_ratio = 0.5
     linear = True
-    seed = 12345
+    seed = 1993
 
-    multipliers = np.array([1, 1.3, 1.5])
-    #f_in = "wmx_%s_%.1f_linear.pkl"%(STDP_mode, place_cell_ratio); multipliers = np.arange(0.8, 1.3, 0.1)
-    #f_in = "wmx_%s_%.1f_2envs_linear.pkl"%(STDP_mode, place_cell_ratio); multipliers = np.arange(0.6, 1.1, 0.1)
+    f_in = "wmx_%s_%.1f_linear.pkl"%(STDP_mode, place_cell_ratio); multipliers = np.arange(0.8, 1.3, 0.1)
+    #f_in = "wmx_%s_%.1f_2envs_linear.pkl"%(STDP_mode, place_cell_ratio)#; multipliers = np.arange(0.5, 1.1, 0.1)
     #f_in = "wmx_%s_%.1f_shuffled_linear.pkl"%(STDP_mode, place_cell_ratio)#; multipliers = np.arange(0.8, 1.3, 0.1)
-    f_in = "wmx_%s_%.1f_binary_linear.pkl"%(STDP_mode, place_cell_ratio)#; multipliers = np.arange(1.3, 1.8, 0.1)
-    #f_in = "wmx_%s_%.1f_block_shuffled_linear.pkl"%(STDP_mode, place_cell_ratio); multipliers = np.arange(0.8, 1.3, 0.1)
+    #f_in = "wmx_%s_%.1f_cshuffled_linear.pkl"%(STDP_mode, place_cell_ratio)#; multipliers = np.arange(0.8, 1.3, 0.1)
+    #f_in = "wmx_%s_%.1f_binary_linear.pkl"%(STDP_mode, place_cell_ratio)#; multipliers = np.arange(1.3, 1.8, 0.1)
     print f_in
     PF_pklf_name = os.path.join(base_path, "files", "PFstarts_%s_linear.pkl"%place_cell_ratio) if linear else None
     f_out = "%s_%s.txt"%(f_in[4:-4], seed)
@@ -52,7 +51,7 @@ if __name__ == "__main__":
         dir_name = os.path.join(base_path, "figures", "%.2f_replay_det_%s_%.1f"%(multiplier, STDP_mode, place_cell_ratio)) if linear else None
 
         SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC = run_simulation(wmx_PC_E*multiplier, STDP_mode,
-                                                                                     que=False, save=False, seed=seed, verbose=verbose)
+                                                                                     cue=False, save=False, seed=seed, verbose=verbose)
         results[i, :] = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC,
                                         multiplier=multiplier, linear=linear, pklf_name=PF_pklf_name, dir_name=dir_name, TFR=TFR, save=False, verbose=verbose)
         del SM_PC; del SM_BC; del RM_PC; del RM_BC; del StateM_PC; del StateM_BC; plt.close("all")

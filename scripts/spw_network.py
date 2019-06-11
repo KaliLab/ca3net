@@ -2,7 +2,7 @@
 """
 Creates PC (adExp IF) and BC (exp IF) population in Brian2, loads in recurrent connection matrix for PC population
 runs simulation and checks the dynamics
-authors: András Ecker, Bence Bagi, Szabolcs Káli last update: 02.2019
+authors: András Ecker, Bence Bagi, Szabolcs Káli last update: 06.2019
 """
 
 import os, sys, shutil
@@ -11,7 +11,7 @@ import random as pyrandom
 from brian2 import *
 prefs.codegen.target = "numpy"
 import matplotlib.pyplot as plt
-from helper import load_wmx, preprocess_monitors, replay_circular, slice_high_activity, replay_linear, save_vars, save_PSD, save_TFR, save_LFP, save_replay_analysis
+from helper import load_wmx, preprocess_monitors, replay_circular, slice_high_activity, replay_linear, generate_cue_spikes, save_vars, save_PSD, save_TFR, save_LFP, save_replay_analysis
 from detect_oscillations import analyse_rate, ripple_AC, ripple, gamma, calc_TFR, analyse_estimated_LFP
 from plots import plot_raster, plot_posterior_trajectory, plot_PSD, plot_TFR, plot_zoomed, plot_detailed, plot_LFP
 
@@ -107,11 +107,11 @@ dx_gaba/dt = -x_gaba/decay_BC_I : 1
 """
 
 
-def run_simulation(wmx_PC_E, STDP_mode, que, save, seed, verbose=True):
+def run_simulation(wmx_PC_E, STDP_mode, cue, save, seed, verbose=True):
     """
     Sets up the network and runs simulation
     :param wmx_PC_E: np.array representing the recurrent excitatory synaptic weight matrix
-    :param que: if True it adds an other Brian2 `SpikeGeneratorGroup` to stimulate a subpop in the beginning (qued replay)
+    :param cue: if True it adds an other Brian2 `SpikeGeneratorGroup` to stimulate a subpop in the beginning (cued replay)
     :param save_spikes: bool flag to save PC spikes after the simulation (used by `bayesian_decoding.py` later)
     :param verbose: bool flag to report status of simulation
     :return SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC: Brian2 monitors (+ array of selected cells used by multi state monitor)
@@ -143,23 +143,14 @@ def run_simulation(wmx_PC_E, STDP_mode, que, save, seed, verbose=True):
 
     MF = PoissonGroup(nPCs, rate_MF)
     C_PC_MF = Synapses(MF, PCs, on_pre="x_ampaMF+=norm_PC_MF*w_PC_MF")
-    C_PC_MF.connect(j='i')
+    C_PC_MF.connect(j="i")
 
-    if que:
-        # generate short (200ms) Poisson spike train at 20Hz (with `PoissonGroup()` one can't specify the duration)
-        from poisson_proc import hom_poisson
-
-        spiking_neurons = np.zeros_like(spike_times)
-        for neuron_id in range(1, 100):
-            spike_times_tmp = np.asarray(hom_poisson(20.0, 10, t_max=0.2, seed=12345+neuron_id))
-            spike_times = np.concatenate((spike_times, spike_times_tmp), axis=0)
-            spiking_neurons_tmp = neuron_id * np.ones_like(spike_times_tmp)
-            spiking_neurons = np.concatenate((spiking_neurons, spiking_neurons_tmp), axis=0)
-        que_input = SpikeGeneratorGroup(100, spiking_neurons, spike_times*second)
-
-        # connects at the end of PC pop (...end of PFs in linear case)
-        C_PC_que = Synapses(que_input, PCs, on_pre="x_ampaMF+=norm_PC_MF*w_PC_MF")
-        C_PC_que.connect(i=np.arange(0, 100), j=np.arange(7000, 7100))
+    if cue:
+        spike_times, spiking_neurons = generate_cue_spikes()
+        cue_input = SpikeGeneratorGroup(100, spiking_neurons, spike_times*second)
+        # connects at the end of PC pop (...end of track in linear case)
+        C_PC_cue = Synapses(cue_input, PCs, on_pre="x_ampaMF+=norm_PC_MF*w_PC_MF")
+        C_PC_cue.connect(i=np.arange(0, 100), j=np.arange(7500, 7600))
 
     # weight matrix used here
     C_PC_E = Synapses(PCs, PCs, "w_exc:1", on_pre="x_ampa+=norm_PC_E*w_exc", delay=delay_PC_E)
@@ -183,7 +174,7 @@ def run_simulation(wmx_PC_E, STDP_mode, que, save, seed, verbose=True):
     RM_BC = PopulationRateMonitor(BCs)
 
     selection = np.arange(0, nPCs, 20)   # subset of neurons for recoring variables
-    StateM_PC = StateMonitor(PCs, variables=["vm", "w", "g_ampa", "g_ampaMF","g_gaba"], record=selection.tolist(), dt=0.1*ms)
+    StateM_PC = StateMonitor(PCs, variables=["vm", "w", "g_ampa", "g_ampaMF", "g_gaba"], record=selection.tolist(), dt=0.1*ms)
     StateM_BC = StateMonitor(BCs, "vm", record=[nBCs/2], dt=0.1*ms)
 
     if verbose:
@@ -192,7 +183,7 @@ def run_simulation(wmx_PC_E, STDP_mode, que, save, seed, verbose=True):
         run(10000*ms)
 
     if save:
-        save_vars(SM_PC, RM_PC, StateM_PC, selection)
+        save_vars(SM_PC, RM_PC, StateM_PC, selection, seed)
 
     return SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC
 
@@ -326,17 +317,17 @@ if __name__ == "__main__":
     seed = 12345
 
     f_in = "wmx_%s_%.1f_linear.pkl"%(STDP_mode, place_cell_ratio) if linear else "wmx_%s_%.1f.pkl"%(STDP_mode, place_cell_ratio)
+    #f_in = "wmx_sym_0.5_2envs_linear.pkl"
     PF_pklf_name = os.path.join(base_path, "files", "PFstarts_%s_linear.pkl"%place_cell_ratio) if linear else None
-    #PF_pklf_name = os.path.join(base_path, "files", "PFstarts_%s_2envs_linear.pkl"%place_cell_ratio) if linear else None
     dir_name = os.path.join(base_path, "figures", "%.2f_replay_det_%s_%.1f"%(1, STDP_mode, place_cell_ratio)) if linear else None
 
-    save = True; que = False; verbose = True; TFR = False
+    save = True; cue = False; verbose = True; TFR = False
 
     pklf_name = os.path.join(base_path, "files", f_in)
     wmx_PC_E = load_wmx(pklf_name) * 1e9 # *1e9 nS conversion
 
     SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC = run_simulation(wmx_PC_E, STDP_mode,
-                                                                                 que=que, save=save, seed=seed, verbose=verbose)
+                                                                                 cue=cue, save=save, seed=seed, verbose=verbose)
     _ = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC,
                         multiplier=1, linear=linear, pklf_name=PF_pklf_name, dir_name=dir_name, TFR=TFR, save=save, verbose=verbose)
 

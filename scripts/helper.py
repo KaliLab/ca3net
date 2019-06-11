@@ -1,14 +1,15 @@
 # -*- coding: utf8 -*-
 """
 Helper functions used here and there
-author: András Ecker, last update: 02.2019
+author: András Ecker, last update: 06.2019
 """
 
 import os, pickle
+from tqdm import tqdm  # progress bar
 import numpy as np
 import pywt
-from tqdm import tqdm  # progress bar
 from brian2.units import *
+from poisson_proc import hom_poisson
 from bayesian_decoding import load_tuning_curves, extract_binspikecount, calc_posterior, fit_trajectory, test_significance
 
 
@@ -459,18 +460,6 @@ def load_spike_trains(npzf_name):
 # ========== misc. ==========
 
 
-def argmin_time_arrays(time_short, time_long):
-    """
-    Finds closest elements in differently sampled time arrays (used for step size analysis...)
-    TODO: add some error managements here....
-    :param time_short: time array with less elements
-    :param time_long: time array with more elements (in the same range)
-    :return: idx of long array, to get closest elements to short array
-    """
-
-    return [np.argmin(np.abs(time_long-t)) for t in time_short]
-
-
 def refractoriness(spike_trains, ref_per=5e-3):
     """
     Delete spikes (from generated train) which are too close to each other
@@ -493,6 +482,32 @@ def refractoriness(spike_trains, ref_per=5e-3):
     print "%i spikes deleted becuse of too short refractory period"%count
 
     return spike_trains_updated
+
+
+def argmin_time_arrays(time_short, time_long):
+    """
+    Finds closest elements in differently sampled time arrays (used for step size analysis...)
+    TODO: add some error managements here....
+    :param time_short: time array with less elements
+    :param time_long: time array with more elements (in the same range)
+    :return: idx of long array, to get closest elements to short array
+    """
+
+    return [np.argmin(np.abs(time_long-t)) for t in time_short]
+
+
+def generate_cue_spikes():
+    """Generates short (200ms) Poisson spike train at 20Hz (with brian2's `PoissonGroup()` one can't specify the duration)"""
+
+    spike_times = np.asarray(hom_poisson(20.0, 10, t_max=0.2, seed=12345))
+    spiking_neurons = np.zeros_like(spike_times)
+    for neuron_id in range(1, 100):
+        spike_times_tmp = np.asarray(hom_poisson(20.0, 10, t_max=0.2, seed=12345+neuron_id))
+        spike_times = np.concatenate((spike_times, spike_times_tmp), axis=0)
+        spiking_neurons_tmp = neuron_id * np.ones_like(spike_times_tmp)
+        spiking_neurons = np.concatenate((spiking_neurons, spiking_neurons_tmp), axis=0)
+
+    return spike_times, spiking_neurons
 
 
 def calc_spiketrain_ISIs():
