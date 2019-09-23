@@ -6,7 +6,6 @@ authors: András Ecker, Eszter Vértes, Szabolcs Káli last update: 10.2018
 
 import os, pickle
 import numpy as np
-import random as pyrandom
 from tqdm import tqdm  # progress bar
 from poisson_proc import hom_poisson, inhom_poisson
 from helper import save_place_fields, refractoriness
@@ -30,12 +29,17 @@ def generate_spike_train(n_neurons, place_cell_ratio, linear, ordered=True, seed
     :return: spike_trains - list of lists with indiviual neuron's spikes
     """
 
+    assert n_neurons >= 1000, "The assumptions made during the setup hold only for a reasonably big group of neurons" 
+
+    neuronIDs = np.arange(0, n_neurons)
     # generate random neuronIDs being place cells and starting points for place fields
     if ordered:
         np.random.seed(seed)
-        pyrandom.seed(seed)
 
-        place_cells = np.sort(pyrandom.sample(range(0, n_neurons), int(n_neurons*place_cell_ratio)), kind="mergesort")
+        p_uniform = 1./n_neurons
+        tmp = (1 - 2*2*100*p_uniform)/(n_neurons-200)
+        p = np.concatenate([2*p_uniform*np.ones(100), tmp*np.ones(n_neurons-2*100), 2*p_uniform*np.ones(100)])  # slightly oversample (double prop.) the 2 ends (first and last 100 neurons) of the track
+        place_cells = np.sort(np.random.choice(neuronIDs, int(n_neurons*place_cell_ratio), p=p, replace=False), kind="mergsort")
         phi_starts = np.sort(np.random.rand(n_neurons), kind="mergesort")[place_cells] * 2*np.pi
 
         if not linear:
@@ -46,9 +50,8 @@ def generate_spike_train(n_neurons, place_cell_ratio, linear, ordered=True, seed
 
     else:
         np.random.seed(seed+1)
-        pyrandom.seed(seed+1)
 
-        place_cells = pyrandom.sample(range(0, n_neurons), int(n_neurons*place_cell_ratio))
+        place_cells = np.random.choice(neuronIDs, int(n_neurons*place_cell_ratio), replace=False)
         phi_starts = np.sort(np.random.rand(n_neurons)[place_cells], kind="mergesort") * 2*np.pi
 
         if not linear:
@@ -79,8 +82,8 @@ if __name__ == "__main__":
     place_cell_ratio = 0.5
     linear = True
 
-    #f_out = "spike_trains_%.1f_linear.npz"%place_cell_ratio if linear else "spike_trains_%.1f.npz"%place_cell_ratio; ordered = True
-    f_out = "intermediate_spike_trains_%.1f_linear.npz"%place_cell_ratio if linear else "intermediate_spike_trains_%.1f.npz"%place_cell_ratio; ordered = False
+    f_out = "spike_trains_%.1f_linear.npz"%place_cell_ratio if linear else "spike_trains_%.1f.npz"%place_cell_ratio; ordered = True
+    #f_out = "intermediate_spike_trains_%.1f_linear.npz"%place_cell_ratio if linear else "intermediate_spike_trains_%.1f.npz"%place_cell_ratio; ordered = False
 
     spike_trains = generate_spike_train(n_neurons, place_cell_ratio, linear=linear, ordered=ordered)
     spike_trains = refractoriness(spike_trains)  # clean spike train (based on refractory period)
