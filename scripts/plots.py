@@ -19,22 +19,22 @@ fig_dir = os.path.join(base_path, "figures")
 nPCs = 8000
 nBCs = 150
 len_sim = 10000  # ms
-spike_th_PC = 19.85800072  # (optimized by Bence)
-spike_th_BC = -17.48690645  # (optimized by Bence)
+spike_th_PC = -3.25524288  # (re-optimized by Szabolcs)
+spike_th_BC = -34.78853881  # (re-optimized by Szabolcs)
 
 
-def plot_raster(spike_times, spiking_neurons, rate, hist, linear, color_, multiplier_):
+def plot_raster(spike_times, spiking_neurons, rate, hist, slice_idx, color_, multiplier_):
     """
     Saves figure with raster plot and NEST like rate below
     :param spike_times, spiking_neurons: used for raster plot (see `detect_oscillation.py/preprocess_monitors()`)
     :param rate: firing rate of the population
     :param hist: used for plotting ISI histogram (see `detect_oscillations.py/preprocess_monitors()`)
-    :param linear: bool for linear/circular replay (slightly different plots)
+    :param slice_idx: boundaries of detected high activity periods
     :param color_, multiplier_: outline and naming parameters
     """
 
     fig = plt.figure(figsize=(10, 8))
-    if linear:
+    if slice_idx is not None:
         gs = gridspec.GridSpec(3, 1, height_ratios=[3, 1, 1])
     else:
         gs = gridspec.GridSpec(3, 1, height_ratios=[3, 1, 2])
@@ -52,6 +52,10 @@ def plot_raster(spike_times, spiking_neurons, rate, hist, linear, color_, multip
     ax2 = fig.add_subplot(gs[1])
     sns.despine(ax=ax2)
     ax2.bar(np.linspace(0, len_sim, len(avg_rate)), avg_rate, width=bin_, align="edge", color=color_, edgecolor="black", linewidth=0.5, alpha=0.9)
+    if slice_idx is not None:
+        for bounds in slice_idx:
+            ax2.axvline(bounds[0], color="gray", ls="--")
+            ax2.axvline(bounds[1], color="gray", ls="--")
     ax2.set_xlim([0, len_sim])
     ax2.set_xlabel("Time (ms)")
     ax2.set_ylabel("Rate (Hz)")
@@ -59,7 +63,7 @@ def plot_raster(spike_times, spiking_neurons, rate, hist, linear, color_, multip
     ax3 = fig.add_subplot(gs[2])
     sns.despine(ax=ax3)
     ax3.bar(hist[1][:-1], hist[0], width=50, align="edge", color=color_, edgecolor="black", linewidth=0.5, alpha=0.9)  # width=50 comes from bins=20
-    if not linear:
+    if slice_idx is None:
         ax3.axvline(150, ls="--", c="gray", label="ROI for replay analysis")
         ax3.axvline(850, ls="--", c="gray")
         ax3.legend()
