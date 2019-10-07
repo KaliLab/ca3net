@@ -1,8 +1,8 @@
 # -*- coding: utf8 -*-
 """
-Creates PC (adExp IF) and BC (exp IF) population in Brian2, loads in recurrent connection matrix for PC population
+Creates AdExpIF PC and BC populations in Brian2, loads in recurrent connection matrix for PC population
 runs simulation and checks the dynamics
-authors: András Ecker, Bence Bagi, Szabolcs Káli last update: 06.2019
+authors: András Ecker, Bence Bagi, Szabolcs Káli last update: 07.2019
 """
 
 import os, sys, shutil
@@ -11,7 +11,8 @@ import random as pyrandom
 from brian2 import *
 prefs.codegen.target = "numpy"
 import matplotlib.pyplot as plt
-from helper import load_wmx, preprocess_monitors, replay_circular, slice_high_activity, replay_linear, generate_cue_spikes, save_vars, save_PSD, save_TFR, save_LFP, save_replay_analysis
+from helper import load_wmx, preprocess_monitors, generate_cue_spikes, save_vars, save_PSD, save_TFR, save_LFP, save_replay_analysis
+from detect_replay import replay_circular, slice_high_activity, replay_linear
 from detect_oscillations import analyse_rate, ripple_AC, ripple, gamma, calc_TFR, analyse_estimated_LFP
 from plots import plot_raster, plot_posterior_trajectory, plot_PSD, plot_TFR, plot_zoomed, plot_detailed, plot_LFP
 
@@ -42,7 +43,7 @@ decay_BC_I = 1.2 * ms  # Bartos 2002
 tp = (decay_PC_E * rise_PC_E)/(decay_PC_E - rise_PC_E) * np.log(decay_PC_E/rise_PC_E)  # time to peak
 norm_PC_E = 1.0 / (np.exp(-tp/decay_PC_E) - np.exp(-tp/rise_PC_E))
 tp = (decay_PC_MF * rise_PC_MF)/(decay_PC_MF - rise_PC_MF) * np.log(decay_PC_MF/rise_PC_MF)
-norm_PC_MF = 1.0 / (np.exp(-tp/decay_PC_E) - np.exp(-tp/rise_PC_E))
+norm_PC_MF = 1.0 / (np.exp(-tp/decay_PC_MF) - np.exp(-tp/rise_PC_MF))
 tp = (decay_PC_I * rise_PC_I)/(decay_PC_I - rise_PC_I) * np.log(decay_PC_I/rise_PC_I)
 norm_PC_I = 1.0 / (np.exp(-tp/decay_PC_I) - np.exp(-tp/rise_PC_I))
 tp = (decay_BC_E * rise_BC_E)/(decay_BC_E - rise_BC_E) * np.log(decay_BC_E/rise_BC_E)
@@ -61,35 +62,52 @@ Erev_I = -70.0 * mV
 rate_MF = 15.0 * Hz  # mossy fiber input freq
 
 z = 1 * nS
-# parameters for PCs (optimized by Bence)
-g_leak_PC = 4.49581428461e-3 * uS
-tau_mem_PC = 37.97630516 * ms
+# AdExpIF parameters for PCs (re-optimized by Szabolcs)
+g_leak_PC = 4.31475791937223 * nS
+tau_mem_PC = 41.7488927175169 * ms
 Cm_PC = tau_mem_PC * g_leak_PC
-Vrest_PC = -59.710040237 * mV
-Vreset_PC = -24.8988661181 * mV
+Vrest_PC = -75.1884554193901 * mV
+Vreset_PC = -29.738747396665072 * mV
+theta_PC = -24.4255910105977 * mV
+tref_PC = 5.96326930945599 * ms
+delta_T_PC = 4.2340696257631 * mV
+spike_th_PC = theta_PC + 5 * delta_T_PC
+a_PC = -0.274347065652738 * nS
+b_PC = 206.841448096415 * pA
+tau_w_PC = 84.9358017225512 * ms
+"""
+# ExpIF parameters for PCs (optimized by Szabolcs)
+g_leak_PC = 4.88880734814042 * nS
+tau_mem_PC = 70.403501012992 * ms
+Cm_PC = tau_mem_PC * g_leak_PC
+Vrest_PC = -61.1396692349678 * mV
+Vreset_PC = -43.3610432444992 * mV
 theta_PC = -13.3139788756 * mV
-tref_PC = 3.79313737057 * ms
-delta_T_PC = 3.31719795927 * mV
-spike_th_PC = theta_PC + 10 * delta_T_PC
-a_PC = -0.255945300382 * nS
-b_PC = 0.22030375858 * nA
-tau_w_PC = 80.1747780694 * ms
-
-# parameters for BCs (optimized by Bence)
-g_leak_BC = 7.0102757369e-3 * uS
-tau_mem_BC = 37.7598232668 * ms
+tref_PC = 1.07004414539699 * ms
+delta_T_PC = 10.7807538634886 * mV
+spike_th_PC = theta_PC + 5 * delta_T_PC
+a_PC = 0. * nS
+b_PC = 0. * pA
+tau_w_PC = 1 * ms
+"""
+# parameters for BCs (re-optimized by Szabolcs)
+g_leak_BC = 7.51454086502288 * nS
+tau_mem_BC = 15.773412296065 * ms
 Cm_BC = tau_mem_BC * g_leak_BC
-Vrest_BC = -58.9682231705 * mV
-Vreset_BC = -39.1229822301 * mV
-theta_BC = -39.5972788689 * mV
-tref_BC = 1.06976577195 * ms
-delta_T_BC = 2.21103724225 * mV
-spike_th_BC = theta_BC + 10 * delta_T_BC
+Vrest_BC = -74.74167987795019 * mV
+Vreset_BC = -64.99190523539687 * mV
+theta_BC = -57.7092044103536 * mV
+tref_BC = 1.15622717832178 * ms
+delta_T_BC = 4.58413312063091 * mV
+spike_th_BC = theta_BC + 5 * delta_T_BC
+a_BC = 3.05640210724374 * nS
+b_BC = 0.916098931234532 * pA
+tau_w_BC = 178.581099914024 * ms
 
 
 eqs_PC = """
 dvm/dt = (-g_leak_PC*(vm-Vrest_PC) + g_leak_PC*delta_T_PC*exp((vm- theta_PC)/delta_T_PC) - w - ((g_ampa+g_ampaMF)*z*(vm-Erev_E) + g_gaba*z*(vm-Erev_I)))/Cm_PC : volt (unless refractory)
-dw/dt = (a_PC*(vm- Vrest_PC )-w)/tau_w_PC : amp
+dw/dt = (a_PC*(vm-Vrest_PC) - w) / tau_w_PC : amp
 dg_ampa/dt = (x_ampa - g_ampa) / rise_PC_E : 1
 dx_ampa/dt = -x_ampa / decay_PC_E : 1
 dg_ampaMF/dt = (x_ampaMF - g_ampaMF) / rise_PC_MF : 1
@@ -99,7 +117,8 @@ dx_gaba/dt = -x_gaba/decay_PC_I : 1
 """
 
 eqs_BC = """
-dvm/dt = (-g_leak_BC*(vm-Vrest_BC) + g_leak_BC*delta_T_BC*exp((vm- theta_BC)/delta_T_BC) - (g_ampa*z*(vm-Erev_E) + g_gaba*z*(vm-Erev_I)))/Cm_BC : volt (unless refractory)
+dvm/dt = (-g_leak_BC*(vm-Vrest_BC) + g_leak_BC*delta_T_BC*exp((vm- theta_BC)/delta_T_BC) - w - (g_ampa*z*(vm-Erev_E) + g_gaba*z*(vm-Erev_I)))/Cm_BC : volt (unless refractory)
+dw/dt = (a_BC*(vm-Vrest_BC) - w) / tau_w_BC : amp
 dg_ampa/dt = (x_ampa - g_ampa) / rise_BC_E : 1
 dx_ampa/dt = -x_ampa/decay_BC_E : 1
 dg_gaba/dt = (x_gaba - g_gaba) / rise_BC_I : 1
@@ -120,25 +139,24 @@ def run_simulation(wmx_PC_E, STDP_mode, cue, save, seed, verbose=True):
     np.random.seed(seed)
     pyrandom.seed(seed)
 
+    # synaptic weights (see `/optimization/optimize_network.py`)
     if STDP_mode == "asym":
-        # synaptic weights (optimized in /optimization/optimize_network.py by BluePyOpt)
-        w_PC_I = 0.17  # nS
-        w_BC_E = 2.6
-        w_BC_I = 3.5
-        w_PC_MF = 25.
+        w_PC_I = 0.65 # nS
+        w_BC_E = 0.85
+        w_BC_I = 5.
+        w_PC_MF = 21.5
     elif STDP_mode == "sym":
-        # synaptic weights (optimized in /optimization/optimize_network.py by BluePyOpt)
-        w_PC_I = 0.175  # nS
-        w_BC_E = 2.6
-        w_BC_I = 3.5
-        w_PC_MF = 25.
+        w_PC_I = 0.65  # nS
+        w_BC_E = 0.85
+        w_BC_I = 5.
+        w_PC_MF = 19.15
 
     PCs = NeuronGroup(nPCs, model=eqs_PC, threshold="vm>spike_th_PC",
                       reset="vm=Vreset_PC; w+=b_PC", refractory=tref_PC, method="exponential_euler")
     PCs.vm = Vrest_PC; PCs.g_ampa = 0.0; PCs.g_ampaMF = 0.0; PCs.g_gaba = 0.0
 
     BCs = NeuronGroup(nBCs, model=eqs_BC, threshold="vm>spike_th_BC",
-                      reset="vm=Vreset_BC", refractory=tref_BC, method="exponential_euler")
+                      reset="vm=Vreset_BC; w+=b_BC", refractory=tref_BC, method="exponential_euler")
     BCs.vm  = Vrest_BC; BCs.g_ampa = 0.0; BCs.g_gaba = 0.0
 
     MF = PoissonGroup(nPCs, rate_MF)
@@ -207,9 +225,7 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC,
         spike_times_PC, spiking_neurons_PC, rate_PC, ISI_hist_PC, bin_edges_PC = preprocess_monitors(SM_PC, RM_PC)
         spike_times_BC, spiking_neurons_BC, rate_BC = preprocess_monitors(SM_BC, RM_BC, calc_ISI=False)
         if not linear:
-            plot_raster(spike_times_PC, spiking_neurons_PC, rate_PC, [ISI_hist_PC, bin_edges_PC], False, "blue", multiplier_=multiplier)
-        else:
-            plot_raster(spike_times_PC, spiking_neurons_PC, rate_PC, [ISI_hist_PC, bin_edges_PC], True, "blue", multiplier_=multiplier)
+            plot_raster(spike_times_PC, spiking_neurons_PC, rate_PC, [ISI_hist_PC, bin_edges_PC], None, "blue", multiplier_=multiplier)
 
         subset = plot_zoomed(spike_times_PC, spiking_neurons_PC, rate_PC, "PC_population", "blue", multiplier_=multiplier,
                              StateM=StateM_PC, selection=selection)
@@ -224,7 +240,8 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC,
         else:
             if verbose:
                 print "Detecting replay..."
-            slice_idx = slice_high_activity(rate_PC)
+            slice_idx = slice_high_activity(rate_PC, th=2, min_len=260)
+            plot_raster(spike_times_PC, spiking_neurons_PC, rate_PC, [ISI_hist_PC, bin_edges_PC], slice_idx, "blue", multiplier_=multiplier)
             replay, replay_results = replay_linear(spike_times_PC, spiking_neurons_PC, slice_idx, pklf_name, N=20)
             if slice_idx:
                 if os.path.isdir(dir_name):
@@ -317,7 +334,6 @@ if __name__ == "__main__":
     seed = 12345
 
     f_in = "wmx_%s_%.1f_linear.pkl"%(STDP_mode, place_cell_ratio) if linear else "wmx_%s_%.1f.pkl"%(STDP_mode, place_cell_ratio)
-    #f_in = "wmx_sym_0.5_2envs_linear.pkl"
     PF_pklf_name = os.path.join(base_path, "files", "PFstarts_%s_linear.pkl"%place_cell_ratio) if linear else None
     dir_name = os.path.join(base_path, "figures", "%.2f_replay_det_%s_%.1f"%(1, STDP_mode, place_cell_ratio)) if linear else None
 

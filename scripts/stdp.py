@@ -1,9 +1,9 @@
 # -*- coding: utf8 -*-
 """
 Loads in hippocampal like spike train (produced by `generate_spike_train.py`) and runs STD learning rule in a recurrent spiking neuron population
--> creates learned weight matrix for PC population, used by `spw*` scripts
+-> creates weight matrix for PC population, used by `spw*` scripts
 updated to produce symmetric STDP curve as reported in Mishra et al. 2016 - 10.1038/ncomms11552
-author: András Ecker, based on Eszter Vértes's code last update: 11.2017
+authors: András Ecker, Eszter Vértes, last update: 11.2017
 """
 
 import os, sys, warnings
@@ -91,12 +91,12 @@ if __name__ == "__main__":
         Ap = 0.01
         Am = -Ap
         wmax = 4e-8  # S
-        scale_factor = 2.65
+        scale_factor = 1.21
     elif STDP_mode == "sym":
         taup = taum = 62.5 * ms
         Ap = Am = 4e-3
         wmax = 2e-8  # S
-        scale_factor = 1.365
+        scale_factor = 0.62
     w_init = 1e-10  # S
     Ap *= wmax; Am *= wmax  # needed to reproduce Brian1 results
 

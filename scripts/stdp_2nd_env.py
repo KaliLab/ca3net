@@ -86,12 +86,12 @@ if __name__ == "__main__":
         Ap = 0.01
         Am = -Ap
         wmax = 4e-8  # S
-        scale_factor = 1.6
+        scale_factor = 1.21
     elif STDP_mode == "sym":
         taup = taum = 62.5 * ms
         Ap = Am = 4e-3
         wmax = 2e-8  # S
-        scale_factor = 1.365
+        scale_factor = 0.62
     Ap *= wmax; Am *= wmax  # needed to reproduce Brian1 results
 
     f_name = os.path.join(base_path, "files", f_in)
@@ -110,6 +110,6 @@ if __name__ == "__main__":
     plot_wmx(weightmx, save_name=f_out[:-4])
     plot_wmx_avg(weightmx, n_pops=100, save_name="%s_avg"%f_out[:-4])
     plot_w_distr(weightmx, save_name="%s_distr"%f_out[:-4])
-    selection = np.array([500, 2000, 4000, 6000, 7500])
+    selection = np.array([500, 2400, 4000, 5500, 7015])
     plot_weights(save_selected_w(weightmx, selection), save_name="%s_sel_weights"%f_out[:-4])
     plt.show()
