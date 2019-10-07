@@ -86,7 +86,7 @@ if __name__ == "__main__":
         Ap = 0.01
         Am = -Ap
         wmax = 4e-8  # S
-        scale_factor = 1.21
+        scale_factor = 1.27
     elif STDP_mode == "sym":
         taup = taum = 62.5 * ms
         Ap = Am = 4e-3
