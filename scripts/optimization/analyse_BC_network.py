@@ -2,7 +2,7 @@
 """
 Analyse pure BC network with Poisson input (based on PC rate)
 -> This is supposed to show that a pure BC network with sufficient external drive can oscillate on ripple freq (see also Schlingloff et al. 2014)
-author: András Ecker last update: 02.2019
+author: András Ecker, last update: 02.2019
 """
 
 import os, pickle
@@ -10,11 +10,11 @@ import numpy as np
 import random as pyrandom
 from brian2 import *
 prefs.codegen.target = "numpy"
-import matplotlib.pyplot as plt
 base_path = os.path.sep.join(os.path.abspath("__file__").split(os.path.sep)[:-3])
 # add "scripts" directory to the path (to import modules)
 sys.path.insert(0, os.path.sep.join([base_path, "scripts"]))
-from detect_oscillations import preprocess_monitors, analyse_rate, ripple, gamma
+from helper import preprocess_monitors
+from detect_oscillations import analyse_rate, ripple, gamma
 from plots import plot_PSD, plot_zoomed, plot_summary_BC
 
 
@@ -46,21 +46,20 @@ delay_BC_E = 0.9 * ms  # Geiger 1997 (data from DG)
 Erev_E = 0.0 * mV
 Erev_I = -70.0 * mV
 
-# synaptic weights (optimized in /optimization/optimize_network.py by BluePyOpt):
-#w_BC_E = 3.75
-#w_BC_I = 7.5
-
 z = 1 * nS
-# parameters for BCs (optimized by Bence)
-g_leak_BC = 7.0102757369e-3 * uS
-tau_mem_BC = 37.7598232668 * ms
+# parameters for BCs (re-optimized by Szabolcs)
+g_leak_BC = 7.51454086502288 * nS
+tau_mem_BC = 15.773412296065 * ms
 Cm_BC = tau_mem_BC * g_leak_BC
-Vrest_BC = -58.9682231705 * mV
-Vreset_BC = -39.1229822301 * mV
-theta_BC = -39.5972788689 * mV
-tref_BC = 1.06976577195 * ms
-delta_T_BC = 2.21103724225 * mV
-spike_th_BC = theta_BC + 10 * delta_T_BC
+Vrest_BC = -74.74167987795019 * mV
+Vreset_BC = -64.99190523539687 * mV
+theta_BC = -57.7092044103536 * mV
+tref_BC = 1.15622717832178 * ms
+delta_T_BC = 4.58413312063091 * mV
+spike_th_BC = theta_BC + 5 * delta_T_BC
+a_BC = 3.05640210724374 * nS
+b_BC = 0.916098931234532 * pA
+tau_w_BC = 178.581099914024 * ms
 
 
 def run_simulation(exc_rate=2, w_BC_E=2.6, w_BC_I=3.5, delay_BC_I=0.6, decay_BC_I=1.2):
@@ -84,7 +83,8 @@ def run_simulation(exc_rate=2, w_BC_E=2.6, w_BC_I=3.5, delay_BC_I=0.6, decay_BC_
     pyrandom.seed(12345)
 
     eqs_BC = """
-    dvm/dt = (-g_leak_BC*(vm-Vrest_BC) + g_leak_BC*delta_T_BC*exp((vm- theta_BC)/delta_T_BC) - (g_ampa*z*(vm-Erev_E) + g_gaba*z*(vm-Erev_I)))/Cm_BC : volt (unless refractory)
+    dvm/dt = (-g_leak_BC*(vm-Vrest_BC) + g_leak_BC*delta_T_BC*exp((vm-theta_BC)/delta_T_BC) - w - (g_ampa*z*(vm-Erev_E) + g_gaba*z*(vm-Erev_I)))/Cm_BC : volt (unless refractory)
+    dw/dt = (a_BC*(vm-Vrest_BC) - w)/tau_w_BC : amp
     dg_ampa/dt = (x_ampa - g_ampa) / rise_BC_E : 1
     dx_ampa/dt = -x_ampa/decay_BC_E : 1
     dg_gaba/dt = (x_gaba - g_gaba) / rise_BC_I : 1
@@ -92,7 +92,7 @@ def run_simulation(exc_rate=2, w_BC_E=2.6, w_BC_I=3.5, delay_BC_I=0.6, decay_BC_
     """
 
     BCs = NeuronGroup(nBCs, model=eqs_BC, threshold="vm>spike_th_BC",
-                      reset="vm=Vreset_BC", refractory=tref_BC, method="exponential_euler")
+                      reset="vm=Vreset_BC; w+=b_BC", refractory=tref_BC, method="exponential_euler")
     BCs.vm  = Vrest_BC; BCs.g_ampa = 0.0; BCs.g_gaba = 0.0
 
     outer_input = PoissonGroup(nBCs, PC_rate)
@@ -125,15 +125,15 @@ def analyse_results(SM_BC, RM_BC, StateM_BC):
         avg_ripple_freq_BC, ripple_power_BC = ripple(f_BC, Pxx_BC, slice_idx=[])
         avg_gamma_freq_BC, gamma_power_BC = gamma(f_BC, Pxx_BC, slice_idx=[])
 
-        #print "Mean inhibitory rate: %.3f"%mean_rate_BC
+        print "Mean inhibitory rate: %.3f"%mean_rate_BC
         print "Average inh. ripple freq: %.3f"%avg_ripple_freq_BC
-        #print "Inh. ripple power: %.3f"%ripple_power_BC
+        print "Inh. ripple power: %.3f"%ripple_power_BC
         #print "Average inh. gamma freq: %.3f"%avg_gamma_freq_BC
         #print "Inh. gamma power: %.3f"%gamma_power_BC
 
-        #plot_PSD(rate_BC, rate_ac_BC, f_BC, Pxx_BC, "BC_population", "green", multiplier_=1)
-        #plot_zoomed(spike_times_BC, spiking_neurons_BC, rate_BC, "BC_population", "green", multiplier_=1,
-        #            PC_pop=False, StateM=StateM_BC)
+        plot_PSD(rate_BC, rate_ac_BC, f_BC, Pxx_BC, "BC_population", "green", multiplier_=1)
+        plot_zoomed(spike_times_BC, spiking_neurons_BC, rate_BC, "BC_population", "green", multiplier_=1,
+                    PC_pop=False, StateM=StateM_BC)
 
         return avg_ripple_freq_BC, ripple_power_BC
 
@@ -145,16 +145,16 @@ def analyse_results(SM_BC, RM_BC, StateM_BC):
 
 if __name__ == "__main__":
 
-    rate_wE = True
-    rate_wI = True
+    rate_wE = False
+    rate_wI = False
     wE_wI = True
-    delay_dacay = true
+    delay_dacay = False
 
-    exc_rates = np.array([1., 1.25, 1.5, 1.75, 2., 2.25, 2.5, 2.75, 3.])
-    ws_BC_I = np.array([3.3, 3.35, 3.4, 3.45, 3.5, 3.55, 3.6, 3.65, 3.7])
-    ws_BC_E = np.array([2.4, 2.45, 2.5, 2.55, 2.6, 2.65, 2.7, 2.75, 2.8])
-    delays_BC_I = np.array([0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8])
-    decays_BC_I = np.array([1., 1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4])
+    exc_rates = np.array([1.5, 1.75, 2., 2.25, 2.5, 2.75, 3, 3.25, 3.5])
+    ws_BC_I = np.array([4.8, 4.85, 4.9, 4.95, 5., 5.05, 5.1, 5.15, 5.2])
+    ws_BC_E = np.array([0.77, 0.79, 0.81, 0.83, 0.85, 0.87, 0.89, 0.91, 0.93])
+    delays_BC_I = np.array([0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1., 1.1, 1.2])
+    decays_BC_I = np.array([0.8, 1., 1.2, 1.4, 1.6, 1.8, 2., 2.2, 2.4])
 
     if rate_wE:
 
