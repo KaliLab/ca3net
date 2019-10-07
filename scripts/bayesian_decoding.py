@@ -243,7 +243,8 @@ def test_significance(bin_spike_counts, tuning_curves, delta_t, R, N):
     orig_tuning_curves = copy.deepcopy(tuning_curves)  # just to make sure...
     shuffled_tuning_curves = [_shuffle_tuning_curves(orig_tuning_curves, seed=12345+i) for i in range(N)]
 
-    pool = mp.Pool(processes=mp.cpu_count()-1)
+    n = N if mp.cpu_count()-1 > N else mp.cpu_count()-1
+    pool = mp.Pool(processes=n)
     Rs = pool.map(_test_significance_subprocess,
                   zip([bin_spike_counts for _ in range(N)], shuffled_tuning_curves, [delta_t for _ in range(N)]))
     pool.terminate()
