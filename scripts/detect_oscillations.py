@@ -1,6 +1,6 @@
 # -*- coding: utf8 -*-
 """
-Functions used to extract dynamic features: detecting sequence replay, computing AC and PSD of population rate, checking for significant frequencies, ...
+Functions used to analyse oscillations: filtering, AC, phase, PSD, checking for significant frequencies...
 authors: András Ecker, Bence Bagi, Eszter Vértes, Szabolcs Káli last update: 02.2019
 """
 
@@ -8,7 +8,7 @@ import pickle
 import numpy as np
 from scipy import signal, misc
 import pywt
-from helper import _avg_rate, _get_consecutive_sublists, _estimate_LFP
+from helper import _avg_rate, _estimate_LFP
 
 
 def _autocorrelation(time_series):
@@ -26,7 +26,7 @@ def _autocorrelation(time_series):
     return autocorrelation[len(autocorrelation)/2:]
 
 
-def _calc_spectrum(time_series, fs, nperseg=512):
+def _calc_spectrum(time_series, fs, nperseg):
     """
     Estimates the power spectral density of the signal using Welch's method
     :param time_series: time series to analyse
@@ -36,7 +36,7 @@ def _calc_spectrum(time_series, fs, nperseg=512):
             Pxx: estimated PSD
     """
 
-    f, Pxx = signal.welch(time_series, fs, nperseg=nperseg)
+    f, Pxx = signal.welch(time_series, fs=fs, window="hann", nperseg=nperseg)
     return f, Pxx
 
 
@@ -62,7 +62,7 @@ def analyse_rate(rate, fs, slice_idx=[]):
         max_acs = [rate_ac[1:].max() for rate_ac in rate_acs]
         t_max_acs = [rate_ac[1:].argmax()+1 for rate_ac in rate_acs]
 
-        PSDs = [_calc_spectrum(rate_tmp, fs=fs, nperseg=128) for rate_tmp in rates]
+        PSDs = [_calc_spectrum(rate_tmp, fs=fs, nperseg=256) for rate_tmp in rates]
         f = PSDs[0][0]
         Pxxs = np.array([tmp[1] for tmp in PSDs])
 
@@ -70,7 +70,7 @@ def analyse_rate(rate, fs, slice_idx=[]):
 
     else:
         rate_ac = _autocorrelation(rate)
-        f, Pxx = _calc_spectrum(rate, fs=fs)
+        f, Pxx = _calc_spectrum(rate, fs=fs, nperseg=512)
 
         return np.mean(rate), rate_ac, rate_ac[1:].max(), rate_ac[1:].argmax()+1, f, Pxx
 
@@ -257,19 +257,22 @@ def analyse_estimated_LFP(StateM, subset, slice_idx=[], fs=10000.):
             lb = bounds[0]; ub = bounds[1]
             LFPs.append(LFP[np.where((lb <= t) & (t < ub))[0]])
 
-        PSDs = [_calc_spectrum(LFP_tmp, fs, nperseg=1024) for LFP_tmp in LFPs]
+            PSDs = [_calc_spectrum(LFP_tmp, fs, nperseg=2048) for LFP_tmp in LFPs]
         f = PSDs[0][0]
-        Pxx = np.array([tmp[1] for tmp in PSDs])
+        Pxxs = np.array([tmp[1] for tmp in PSDs])
+
+        # for comparable results cut spectrum at 500 Hz
+        f = np.asarray(f)
+        idx = np.where(f < 500)[0]
+        f = f[idx]
+        Pxxs = Pxxs[:, idx]
+        return t, LFP, f, Pxxs
     else:
-        f, Pxx = _calc_spectrum(LFP, fs, nperseg=2048)
 
-    # for comparable results cut spectrum at 500 Hz
-    f = np.asarray(f)
-    idx = np.where(f < 500)[0]
-    f = f[idx]
-    try:
-        Pxx = Pxx[:, idx]
-    except:
+        f, Pxx = _calc_spectrum(LFP, fs, nperseg=4096)
+        # for comparable results cut spectrum at 500 Hz
+        f = np.asarray(f)
+        idx = np.where(f < 500)[0]
+        f = f[idx]
         Pxx = Pxx[idx]
-
-    return t, LFP, f, Pxx
+        return t, LFP, f, Pxx
