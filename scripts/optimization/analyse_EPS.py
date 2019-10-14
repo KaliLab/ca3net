@@ -5,6 +5,7 @@ author: András Ecker last update: 10.2018
 """
 
 import os, sys
+from tqdm import tqdm  # progress bar
 import numpy as np
 import random as pyrandom
 from brian2 import *
@@ -26,19 +27,19 @@ delay_PC_E = 2.2 * ms  # Guzman 2016
 Erev_E = 0.0 * mV
 
 z = 1 * nS
-# parameters for PCs (optimized by Bence)
-g_leak_PC = 4.49581428461e-3 * uS
-tau_mem_PC = 37.97630516 * ms
+# AdExpIF parameters for PCs (re-optimized by Szabolcs)
+g_leak_PC = 4.31475791937223 * nS
+tau_mem_PC = 41.7488927175169 * ms
 Cm_PC = tau_mem_PC * g_leak_PC
-Vrest_PC = -59.710040237 * mV
-Vreset_PC = -24.8988661181 * mV
-theta_PC = -13.3139788756 * mV
-tref_PC = 3.79313737057 * ms
-delta_T_PC = 3.31719795927 * mV
-spike_th_PC = theta_PC + 10 * delta_T_PC
-a_PC = -0.255945300382 * nS
-b_PC = 0.22030375858 * nA
-tau_w_PC = 80.1747780694 * ms
+Vrest_PC = -75.1884554193901 * mV
+Vreset_PC = -29.738747396665072 * mV
+theta_PC = -24.4255910105977 * mV
+tref_PC = 5.96326930945599 * ms
+delta_T_PC = 4.2340696257631 * mV
+spike_th_PC = theta_PC + 5 * delta_T_PC
+a_PC = -0.274347065652738 * nS
+b_PC = 206.841448096415 * pA
+tau_w_PC = 84.9358017225512 * ms
 
 eqs_PC = """
 dvm/dt = (-g_leak_PC*(vm-Vrest_PC) + g_leak_PC*delta_T_PC*exp((vm- theta_PC)/delta_T_PC) - w + I + EPSC)/Cm_PC : volt (unless refractory)
@@ -107,7 +108,7 @@ if __name__ == "__main__":
         n = 500  # number of random weights
 
     v_hold = -70.  # mV
-    i_hold = -43.638  # pA (calculated by `clamp_cell.py`)
+    i_hold = 20.967  # pA (calculated by `clamp_cell.py`)
 
     f_in = "wmx_sym_0.5_linear.pkl"
     pklf_name = os.path.join(base_path, "files", "paper", f_in)
@@ -121,13 +122,11 @@ if __name__ == "__main__":
 
     EPSPs = np.zeros((n, 4000)); EPSCs = np.zeros((n, 4000))  # 4000 is hard coded for sim length
     peak_EPSPs = np.zeros(n); peak_EPSCs = np.zeros(n)
-    for i, weight in enumerate(weights):
+    for i, weight in enumerate(tqdm(weights)):
         t_, EPSP, EPSC = sym_paired_recording(weight, i_hold)
         EPSPs[i,:] = EPSP; EPSCs[i,:] = EPSC
         peak_EPSPs[i] = get_peak_EPSP(t_, EPSP, i_hold, v_hold)
         peak_EPSCs[i] = np.max(EPSC)
-        if i % 50 == 0:
-            print("%s/%s done..."%(i, n))
 
     t_, EPSP, EPSC = sym_paired_recording(np.mean(nonzero_weights), i_hold)
 
