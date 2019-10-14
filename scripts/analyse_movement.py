@@ -8,8 +8,9 @@ import os, pickle
 import numpy as np
 import random as pyrandom
 from bayesian_decoding import load_tuning_curves, extract_binspikecount, calc_posterior
+from detect_replay import slice_high_activity
 from detect_oscillations import bandpass_filter, calc_phase
-from helper import load_spikes, load_LFP, slice_high_activity, argmin_time_arrays, save_step_sizes, save_gavg_step_sizes
+from helper import load_spikes, load_LFP, argmin_time_arrays, save_step_sizes, save_gavg_step_sizes
 from plots import plot_step_sizes, plot_step_size_distr, plot_step_size_phases
 
 
@@ -22,7 +23,7 @@ def _get_gamma_phase(t, LFP, slice_idx):
     """
     Filters LFP in gamma freq, extracts phase from HIlbert transform and returns sliced results
     :param LFP: estimated LFP
-    :param slice_idx: time idx used to slice out high activity states (see `helper.py/slice_high_activity()`)
+    :param slice_idx: time idx used to slice out high activity states (see `detect_replay.py/slice_high_activity()`)
     :return: gamma_filtered_LFPs, phases: dicts with sliced gamma filtered LFPs and corresponding phases
     """
 
@@ -43,7 +44,7 @@ def _est_trajectories(spike_times, spiking_neurons, slice_idx, delta_t, step_siz
     """
     Weighted mean estimate of trajectories similar to Pfeiffer and Foster 2015 (see position decoding in `bayesian_decoding.py`)
     :param spike_times, spiking_neurons: see `helper/load_spikes()`
-    :param slice_idx: time idx used to slice out high activity states (see `helper.py/slice_high_activity()`)
+    :param slice_idx: time idx used to slice out high activity states (see `detect_replay.py/slice_high_activity()`)
     :param tuning_curves: dictionary of tuning curves {neuronID: tuning curve} (see `bayesian_decoding.py/load_tuning_curves()`)
     return: trajectories: trajectories calculated as maximum-likelihood estimates of position
     """
@@ -114,7 +115,7 @@ def analyse_single_seed(tuning_curves, delta_t, t_incr, fig_dir):
 
     pklf_name = os.path.join(base_path, "files", "sim_vars_PC_12345.pkl")
     spike_times, spiking_neurons, rate = load_spikes(pklf_name)
-    slice_idx = slice_high_activity(rate)
+    slice_idx = slice_high_activity(rate, th=2, min_len=260)
 
     trajectories = _est_trajectories(spike_times, spiking_neurons, slice_idx, delta_t, t_incr, tuning_curves)
     step_sizes = _get_step_sizes(trajectories)
@@ -135,7 +136,7 @@ def analyse_single_seed(tuning_curves, delta_t, t_incr, fig_dir):
     plot_step_size_distr(np.hstack(step_sizes.values()), np.asarray(avg_step_sizes.values()), fig_name)
 
     all_step_sizes, corresponding_phases = _analyse_phase_relationship(step_sizes, phases, delta_t)
-    # remove above avg. step sizes and their phases from the grand avg. distributions, to better see large steps...
+    # remove below avg. step sizes and their phases from the grand avg. distributions, to better see large steps...
     idx = np.where(np.asarray(all_step_sizes) > np.mean(avg_step_sizes.values()))[0]
     plot_step_sizes_ = np.asarray(all_step_sizes)[idx]
     plot_corresponding_phases = np.asarray(corresponding_phases)[idx]
@@ -157,7 +158,7 @@ def analyse_multiple_seeds(seeds, tuning_curves, delta_t, t_incr):
     for seed in seeds:
         pklf_name = os.path.join(base_path, "files", "sim_vars_PC_%i.pkl"%seed)
         spike_times, spiking_neurons, rate = load_spikes(pklf_name)
-        slice_idx = slice_high_activity(rate)
+        slice_idx = slice_high_activity(rate, th=2, min_len=260)
 
         trajectories = _est_trajectories(spike_times, spiking_neurons, slice_idx, delta_t, t_incr, tuning_curves)
         step_sizes = _get_step_sizes(trajectories)
@@ -178,7 +179,7 @@ def analyse_multiple_seeds(seeds, tuning_curves, delta_t, t_incr):
     fig_name = os.path.join(base_path, "figures", "gavg_steps_distr.png")
     plot_step_size_distr(np.asarray(gall_step_sizes), np.asarray(gavg_step_sizes), fig_name)
 
-    # remove above avg. step sizes and their phases from the grand avg. distributions, to better see large steps...
+    # remove below avg. step sizes and their phases from the grand avg. distributions, to better see large steps...
     idx = np.where(np.asarray(gall_step_sizes) > np.mean(gavg_step_sizes))[0]
     plot_step_sizes_ = np.asarray(gall_step_sizes)[idx]
     plot_corresponding_phases = np.asarray(gall_corresponding_phases)[idx]
