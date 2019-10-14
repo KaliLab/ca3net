@@ -914,10 +914,10 @@ def plot_SS_voltage(t, v, SS_voltage, current):
     ax.plot(np.linspace(800, 1000, 200), SS_voltage*np.ones(200), linewidth=1.5, label="V_SS: %.3f mV"%SS_voltage)
     ax.set_xlabel("Time (ms)")
     ax.set_ylabel("Memb. pot. (mV)")
-    ax.set_title("Pyramidal cell with %s pA input"%current)
+    ax.set_title("Cell with %s pA input"%current)
     ax.legend()
 
-    fig_name = os.path.join(fig_dir, "clampPC_%s.png"%current)
+    fig_name = os.path.join(fig_dir, "clamp_%s.png"%current)
     fig.savefig(fig_name)
 
 
@@ -985,6 +985,7 @@ def plot_EPS_dist(peak_EPSPs, peak_EPSCs, save_name):
     fig.savefig(fig_name)
 
 
+# not used in the final version...
 def plot_learned_EPSPs(delta_ts, EPSPs, save_name):
     """
     Saves plot with EPSPs after learning (via STDP)
@@ -1015,6 +1016,7 @@ def plot_learned_EPSPs(delta_ts, EPSPs, save_name):
     fig.savefig(fig_name)
 
 
+# not used in the final version...
 def plot_compare_STDP_to_orig(EPSP_changes, orig_data, save_name, orig_exp_fit=None, sim_exp_fit=None):
     """
     Saves plot based on Figure 1 i) in Mishra et al. 2016 - 10.1038/ncomms11552, extended with the in silico EPSP changes (with fixed cell model and STDP rule)
@@ -1060,6 +1062,7 @@ def plot_compare_STDP_to_orig(EPSP_changes, orig_data, save_name, orig_exp_fit=N
     fig.savefig(fig_name)
 
 
+# not used in the final version...
 def plot_STDP2(STDP_params, sim_exp_fit, save_name):
     """
     Saves plot of the STDP rule used for learning
