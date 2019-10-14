@@ -130,8 +130,10 @@ def run_simulation(wmx_PC_E, STDP_mode, cue, save, seed, verbose=True):
     """
     Sets up the network and runs simulation
     :param wmx_PC_E: np.array representing the recurrent excitatory synaptic weight matrix
+    :param STDP_mode: asym/sym STDP mode used for the learning (see `stdp.py`) - here used only to set the weights
     :param cue: if True it adds an other Brian2 `SpikeGeneratorGroup` to stimulate a subpop in the beginning (cued replay)
-    :param save_spikes: bool flag to save PC spikes after the simulation (used by `bayesian_decoding.py` later)
+    :param save: bool flag to save PC spikes after the simulation (used by `bayesian_decoding.py` later)
+    :param seed: random seed used for running the simulation
     :param verbose: bool flag to report status of simulation
     :return SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC: Brian2 monitors (+ array of selected cells used by multi state monitor)
     """
@@ -206,17 +208,19 @@ def run_simulation(wmx_PC_E, STDP_mode, cue, save, seed, verbose=True):
     return SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC
 
 
-def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC,
+def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC, seed,
                     multiplier, linear, pklf_name, dir_name, TFR, save, verbose=True):
     """
     Analyses results from simulations (see `detect_oscillations.py`)
     :param SM_PC, SM_BC, RM_PC, RM_BC: Brian2 spike and rate monitors of PC and BC populations (see `run_simulation()`)
     :param selection: array of selected cells used by PC multi state monitor
+    :param seed: random seed used to run the sim - here used only for saving
     :param multiplier: weight matrix multiplier (see `spw_network_wmx_mult.py`)
     :param linear: bool for linear/circular weight matrix (more advanced replay detection is used in linear case)
     :param pklf_name: file name of saved place fileds used for replay detection in the linear case
     :param dir_name: subdirectory name used to save replay detection (and optionally TFR) figures in linear case
     :param TFR: bool for calculating time freq. repr. (using wavelet analysis) or not
+    :param save: bool for saving results
     :param verbose: bool for printing results or not
     """
 
@@ -242,7 +246,7 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC,
                 print "Detecting replay..."
             slice_idx = slice_high_activity(rate_PC, th=2, min_len=260)
             plot_raster(spike_times_PC, spiking_neurons_PC, rate_PC, [ISI_hist_PC, bin_edges_PC], slice_idx, "blue", multiplier_=multiplier)
-            replay, replay_results = replay_linear(spike_times_PC, spiking_neurons_PC, slice_idx, pklf_name, N=20)
+            replay, replay_results = replay_linear(spike_times_PC, spiking_neurons_PC, slice_idx, pklf_name, N=9)
             if slice_idx:
                 if os.path.isdir(dir_name):
                     shutil.rmtree(dir_name)
@@ -253,7 +257,7 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC,
                     fig_name = os.path.join(dir_name, "%i-%i_replay.png"%(bounds[0], bounds[1]))
                     plot_posterior_trajectory(tmp["X_posterior"], tmp["fitted_path"], tmp["R"], fig_name)
             if save:
-                save_replay_analysis(replay, replay_results)
+                save_replay_analysis(replay, replay_results, seed)
 
         mean_rate_PC, rate_ac_PC, max_ac_PC, t_max_ac_PC, f_PC, Pxx_PC = analyse_rate(rate_PC, 1000., slice_idx)
         mean_rate_BC, rate_ac_BC, max_ac_BC, t_max_ac_BC, f_BC, Pxx_BC = analyse_rate(rate_BC, 1000., slice_idx)
@@ -264,8 +268,8 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC,
         plot_LFP(t_LFP, LFP, f_LFP, Pxx_LFP, multiplier_=multiplier)
 
         if save:
-            save_LFP(t_LFP, LFP)
-            save_PSD(f_PC, Pxx_PC, f_BC, Pxx_BC, f_LFP, Pxx_LFP)
+            save_LFP(t_LFP, LFP, seed)
+            save_PSD(f_PC, Pxx_PC, f_BC, Pxx_BC, f_LFP, Pxx_LFP, seed)
 
         if TFR:
             coefs_PC, freqs_PC = calc_TFR(rate_PC, 1000., slice_idx)
@@ -285,7 +289,7 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC,
                         fig_name = os.path.join(dir_name, "%i-%i_LFP_wt.png"%(bounds[0], bounds[1]))
                         plot_TFR(coefs_LFP[i], freqs_LFP, "LFP", fig_name)
             if save:
-                save_TFR(freqs_PC, coefs_PC, freqs_BC, coefs_BC, freqs_LFP, coefs_LFP)
+                save_TFR(freqs_PC, coefs_PC, freqs_BC, coefs_BC, freqs_LFP, coefs_LFP, seed)
 
         max_ac_ripple_PC, t_max_ac_ripple_PC = ripple_AC(rate_ac_PC, slice_idx)
         max_ac_ripple_BC, t_max_ac_ripple_BC = ripple_AC(rate_ac_BC, slice_idx)
@@ -337,14 +341,14 @@ if __name__ == "__main__":
     PF_pklf_name = os.path.join(base_path, "files", "PFstarts_%s_linear.pkl"%place_cell_ratio) if linear else None
     dir_name = os.path.join(base_path, "figures", "%.2f_replay_det_%s_%.1f"%(1, STDP_mode, place_cell_ratio)) if linear else None
 
-    save = True; cue = False; verbose = True; TFR = False
+    save = True; cue = False; verbose = True; TFR = True
 
     pklf_name = os.path.join(base_path, "files", f_in)
     wmx_PC_E = load_wmx(pklf_name) * 1e9 # *1e9 nS conversion
 
     SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC = run_simulation(wmx_PC_E, STDP_mode,
                                                                                  cue=cue, save=save, seed=seed, verbose=verbose)
-    _ = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC,
+    _ = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC, seed=seed,
                         multiplier=1, linear=linear, pklf_name=PF_pklf_name, dir_name=dir_name, TFR=TFR, save=save, verbose=verbose)
 
     plt.show()

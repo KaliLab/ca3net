@@ -174,7 +174,7 @@ def save_vars(SM, RM, StateM, subset, seed, f_name="sim_vars_PC"):
     Saves PC pop spikes, firing rate and PSCs from a couple of recorded neurons after the simulation
     :param SM, RM: Brian2 SpikeMonitor, PopulationRateMonitor and StateMonitor
     :param subset: IDs of the recorded neurons
-    :param seed: random seed used to run the simulation
+    :param seed: random seed used to run the simulation - here used only for naming
     :param f_name: name of saved file
     """
 
@@ -189,61 +189,65 @@ def save_vars(SM, RM, StateM, subset, seed, f_name="sim_vars_PC"):
         PSCs[i] = {"i_exc": i_exc/pA, "i_inh":i_inh/pA}
     PSCs["t"] = StateM.t_ * 1000.  # *1000 ms conversion
 
-    results = {"spike_times":spike_times, "spiking_neurons":spiking_neurons, "rate":rate, "PSCs":PSCs, "seed":seed}
-    pklf_name = os.path.join(base_path, "files", "%s.pkl"%f_name)
+    results = {"spike_times":spike_times, "spiking_neurons":spiking_neurons, "rate":rate, "PSCs":PSCs}
+    pklf_name = os.path.join(base_path, "files", "%s_%s.pkl"%(f_name, seed))
     with open(pklf_name, "wb") as f:
         pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def save_PSD(f_PC, Pxx_PC, f_BC, Pxx_BC, f_LFP, Pxx_LFP, f_name="PSD"):
+def save_PSD(f_PC, Pxx_PC, f_BC, Pxx_BC, f_LFP, Pxx_LFP, seed, f_name="PSD"):
     """
     Saves PSDs for PC and BC pop as well as LFP
     :params: f*, Pxx*: freqs and PSD (see `analyse_rate()` and `analyse_estimated_LFP()`)
+    :param seed: random seed used to run the simulation - here used only for naming
     :param f_name: name of saved file
     """
 
     results = {"f_PC":f_PC, "Pxx_PC":Pxx_PC, "f_BC":f_BC, "Pxx_BC":Pxx_BC, "f_LFP":f_LFP, "Pxx_LFP":Pxx_LFP}
-    pklf_name = os.path.join(base_path, "files", "%s.pkl"%f_name)
+    pklf_name = os.path.join(base_path, "files", "%s_%s.pkl"%(f_name, seed))
     with open(pklf_name, "wb") as f:
         pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def save_TFR(f_PC, coefs_PC, f_BC, coefs_BC, f_LFP, coefs_LFP, f_name="TFR"):
+def save_TFR(f_PC, coefs_PC, f_BC, coefs_BC, f_LFP, coefs_LFP, seed, f_name="TFR"):
     """
     Saves TFR for PC and BC pop as well as LFP
     :params: f*, coefs*: freqs and coefficients (see `calc_TFR()`)
+    :param seed: random seed used to run the simulation - here used only for naming
     :param f_name: name of saved file
     """
 
     results = {"f_PC":f_PC, "coefs_PC":coefs_PC, "f_BC":f_BC, "coefs_BC":coefs_BC, "f_LFP":f_LFP, "coefs_LFP":coefs_LFP}
-    pklf_name = os.path.join(base_path, "files", "%s.pkl"%f_name)
+    pklf_name = os.path.join(base_path, "files", "%s_%s.pkl"%(f_name, seed))
     with open(pklf_name, "wb") as f:
         pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def save_LFP(t, LFP, f_name="LFP"):
+def save_LFP(t, LFP, seed, f_name="LFP"):
     """
     Saves estimated LFP
     :params: t, LFP: time and LFP (see `analyse_estimated_LFP()`)
+    :param seed: random seed used to run the simulation - here used only for naming
     :param f_name: name of saved file
     """
 
     results = {"t":t, "LFP":LFP}
-    pklf_name = os.path.join(base_path, "files", "%s.pkl"%f_name)
+    pklf_name = os.path.join(base_path, "files", "%s_%s.pkl"%(f_name, seed))
     with open(pklf_name, "wb") as f:
         pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def save_replay_analysis(replay, replay_results, f_name="replay"):
+def save_replay_analysis(replay, replay_results, seed, f_name="replay"):
     """
     Saves estimated LFP
     :params: replay: 1/nan for detected/undetected replay
     :param replay_results: saved matrices, fitted paths and sign. analysis from replay analysis (see `replay_linear()`)
+    :param seed: random seed used to run the simulation - here used only for naming
     :param f_name: name of saved file
     """
 
     results = {"replay":replay, "replay_results":replay_results}
-    pklf_name = os.path.join(base_path, "files", "%s.pkl"%f_name)
+    pklf_name = os.path.join(base_path, "files", "%s_%s.pkl"%(f_name, seed))
     with open(pklf_name, "wb") as f:
         pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -428,7 +432,7 @@ def calc_spiketrain_ISIs():
         pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def calc_single_cell_rates():
+def calc_single_cell_rates(seed):
     """Calculates single cell firing rates for cells (separately for place cells, non-place cells and BCs)"""
 
     # just to get place cell idx
@@ -436,7 +440,7 @@ def calc_single_cell_rates():
     with open(pklf_name, "rb") as f:
         PFs = pickle.load(f)
 
-    pklf_name = os.path.join(base_path, "files", "sim_vars_PC.pkl")
+    pklf_name = os.path.join(base_path, "files", "sim_vars_PC_%s.pkl"%seed)
     spike_times, spiking_neurons, _ = load_spikes(pklf_name)
 
     place_cell_rates = []
@@ -449,7 +453,7 @@ def calc_single_cell_rates():
         else:
             nplace_cell_rates.append(len(spikes)/(len_sim/1000.))
 
-    pklf_name = os.path.join(base_path, "files", "sim_vars_BC.pkl")
+    pklf_name = os.path.join(base_path, "files", "sim_vars_BC_%s.pkl"%seed)
     spike_times, spiking_neurons, _ = load_spikes(pklf_name)
 
     BC_rates = []
@@ -459,12 +463,12 @@ def calc_single_cell_rates():
         BC_rates.append(len(spikes)/(len_sim/1000.))
 
     results = {"PCs":np.asarray(place_cell_rates), "nPCs":np.asarray(nplace_cell_rates), "BCs":np.asarray(BC_rates)}
-    pklf_name = os.path.join(base_path, "files", "single_cell_rates.pkl")
+    pklf_name = os.path.join(base_path, "files", "single_cell_rates_%s.pkl"%seed)
     with open(pklf_name, "wb") as f:
         pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def calc_ISIs():
+def calc_ISIs(seed):
     """Calculates inter spike intervals for cells (separately for place cells, non-place cells and BCs)"""
 
     # just to get place cell idx
@@ -472,7 +476,7 @@ def calc_ISIs():
     with open(pklf_name, "rb") as f:
         PFs = pickle.load(f)
 
-    pklf_name = os.path.join(base_path, "files", "sim_vars_PC.pkl")
+    pklf_name = os.path.join(base_path, "files", "sim_vars_PC_%s.pkl"%seed)
     spike_times, spiking_neurons, _ = load_spikes(pklf_name)
 
     place_cell_ISIs = []
@@ -485,7 +489,7 @@ def calc_ISIs():
         else:
             nplace_cell_ISIs.extend(np.diff(spikes).tolist())
 
-    pklf_name = os.path.join(base_path, "files", "sim_vars_BC.pkl")
+    pklf_name = os.path.join(base_path, "files", "sim_vars_BC_%s.pkl"%seed)
     spike_times, spiking_neurons, _ = load_spikes(pklf_name)
 
     BC_ISIs = []
@@ -495,15 +499,15 @@ def calc_ISIs():
         BC_ISIs.extend(np.diff(spikes).tolist())
 
     results = {"PCs":np.asarray(place_cell_ISIs), "nPCs":np.asarray(nplace_cell_ISIs), "BCs":np.asarray(BC_ISIs)}
-    pklf_name = os.path.join(base_path, "files", "ISIs.pkl")
+    pklf_name = os.path.join(base_path, "files", "ISIs_%s.pkl"%seed)
     with open(pklf_name, "wb") as f:
         pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def calc_LFP_TFR():
+def calc_LFP_TFR(seed):
     """Calculates TFR of the full LFP (not sliced, not downsampled)"""
 
-    pklf_name = os.path.join(base_path, "files", "LFP.pkl")
+    pklf_name = os.path.join(base_path, "files", "LFP_%s.pkl"%seed)
     t, LFP = load_LFP(pklf_name)
     fs = 10000.
 
@@ -511,13 +515,14 @@ def calc_LFP_TFR():
     coefs, freqs = pywt.cwt(LFP, scales, "morl", 1/fs)
 
     results = {"coefs":coefs, "freqs":freqs}
-    pklf_name = os.path.join(base_path, "files", "LFP_TFR.pkl")
+    pklf_name = os.path.join(base_path, "files", "LFP_TFR_%s.pkl"%seed)
     with open(pklf_name, "wb") as f:
         pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 #if __name__ == "__main__":
 #    calc_spiketrain_ISIs()
-#    calc_single_cell_rates()
-#    calc_ISIs()
-#    calc_LFP_TFR()
+#    seed = 12345
+#    calc_single_cell_rates(seed)
+#    calc_ISIs(seed)
+#    calc_LFP_TFR(seed)
