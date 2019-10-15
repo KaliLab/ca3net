@@ -62,7 +62,7 @@ b_BC = 0.916098931234532 * pA
 tau_w_BC = 178.581099914024 * ms
 
 
-def run_simulation(exc_rate=2, w_BC_E=2.6, w_BC_I=3.5, delay_BC_I=0.6, decay_BC_I=1.2):
+def run_simulation(exc_rate=3.5, w_BC_E=0.85, w_BC_I=5., delay_BC_I=0.6, decay_BC_I=1.2):
     """
     Sets up the purely inhibitory network with outer input and runs simulation
     :param exc_rate: rate of PC population
@@ -145,14 +145,14 @@ def analyse_results(SM_BC, RM_BC, StateM_BC):
 
 if __name__ == "__main__":
 
-    rate_wE = False
-    rate_wI = False
+    rate_wE = True
+    rate_wI = True
     wE_wI = True
     delay_dacay = False
 
-    exc_rates = np.array([1.5, 1.75, 2., 2.25, 2.5, 2.75, 3, 3.25, 3.5])
+    exc_rates = np.array([2.5, 2.75, 3., 3.25, 3.5, 3.75, 4., 4.25, 4.5])
     ws_BC_I = np.array([4.8, 4.85, 4.9, 4.95, 5., 5.05, 5.1, 5.15, 5.2])
-    ws_BC_E = np.array([0.77, 0.79, 0.81, 0.83, 0.85, 0.87, 0.89, 0.91, 0.93])
+    ws_BC_E = np.array([0.75, 0.775, 0.8, 0.825, 0.85, 0.875, 0.9, 0.925, 0.95])
     delays_BC_I = np.array([0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1., 1.1, 1.2])
     decays_BC_I = np.array([0.8, 1., 1.2, 1.4, 1.6, 1.8, 2., 2.2, 2.4])
 
