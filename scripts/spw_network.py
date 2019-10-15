@@ -80,9 +80,9 @@ tau_w_PC = 84.9358017225512 * ms
 g_leak_PC = 4.88880734814042 * nS
 tau_mem_PC = 70.403501012992 * ms
 Cm_PC = tau_mem_PC * g_leak_PC
-Vrest_PC = -61.1396692349678 * mV
-Vreset_PC = -43.3610432444992 * mV
-theta_PC = -13.3139788756 * mV
+Vrest_PC = -76.59966923496779 * mV
+Vreset_PC = -58.8210432444992 * mV
+theta_PC = -28.7739788756 * mV
 tref_PC = 1.07004414539699 * ms
 delta_T_PC = 10.7807538634886 * mV
 spike_th_PC = theta_PC + 5 * delta_T_PC
@@ -341,7 +341,7 @@ if __name__ == "__main__":
     PF_pklf_name = os.path.join(base_path, "files", "PFstarts_%s_linear.pkl"%place_cell_ratio) if linear else None
     dir_name = os.path.join(base_path, "figures", "%.2f_replay_det_%s_%.1f"%(1, STDP_mode, place_cell_ratio)) if linear else None
 
-    save = True; cue = False; verbose = True; TFR = True
+    save = True; cue = False; verbose = True; TFR = False
 
     pklf_name = os.path.join(base_path, "files", f_in)
     wmx_PC_E = load_wmx(pklf_name) * 1e9 # *1e9 nS conversion
