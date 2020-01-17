@@ -2,7 +2,7 @@
 """
 Analyse pure BC network with direct current injection
 -> This is supposed to show that a pure BC network with sufficient external drive can oscillate on ripple freq (see also Schlingloff et al. 2014)
-author: András Ecker last update: 04.2019
+author: András Ecker last update: 01.2020
 """
 
 import os, pickle

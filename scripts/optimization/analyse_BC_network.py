@@ -2,7 +2,7 @@
 """
 Analyse pure BC network with Poisson input (based on PC rate)
 -> This is supposed to show that a pure BC network with sufficient external drive can oscillate on ripple freq (see also Schlingloff et al. 2014)
-author: András Ecker, last update: 02.2019
+author: András Ecker, last update: 01.2020
 """
 
 import os, pickle
@@ -138,7 +138,7 @@ def analyse_results(SM_BC, RM_BC, StateM_BC, analyse_currents=False):
             # simplified version of `../helper.py/_estimate_LFP()`
             t = StateM_BC.t_ * 1000.  # *1000 ms conversion
             v = StateM_BC[nBCs/2].vm
-            g_exc = StateM_BC[nBCs/2].g_ampa*nS + StateM[i].g_ampaMF*nS
+            g_exc = StateM_BC[nBCs/2].g_ampa*nS
             i_exc = g_exc * (v - (Erev_E * np.ones_like(v/mV)))  # pA
             g_inh = StateM_BC[nBCs/2].g_gaba*nS
             i_inh = g_inh * (v - (Erev_I * np.ones_like(v/mV)))  # pA
