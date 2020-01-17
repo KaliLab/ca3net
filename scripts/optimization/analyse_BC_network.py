@@ -62,7 +62,7 @@ b_BC = 0.916098931234532 * pA
 tau_w_BC = 178.581099914024 * ms
 
 
-def run_simulation(exc_rate=3.5, w_BC_E=0.85, w_BC_I=5., delay_BC_I=0.6, decay_BC_I=1.2):
+def run_simulation(exc_rate=3.5, w_BC_E=0.85, w_BC_I=5., delay_BC_I=0.6, decay_BC_I=1.2, report_currents=False):
     """
     Sets up the purely inhibitory network with outer input and runs simulation
     :param exc_rate: rate of PC population
@@ -70,6 +70,7 @@ def run_simulation(exc_rate=3.5, w_BC_E=0.85, w_BC_I=5., delay_BC_I=0.6, decay_B
     :param w_BC_I: BC-BC synaptic weight
     :param delay_BC_I: BC-BC synaptic delay
     :param decay_BC_I: BC-BC decay time constant
+    :param report_currents: bool flag to report currents
     :return: Brian2 monitors
     """
 
@@ -105,17 +106,22 @@ def run_simulation(exc_rate=3.5, w_BC_E=0.85, w_BC_I=5., delay_BC_I=0.6, decay_B
 
     SM_BC = SpikeMonitor(BCs)
     RM_BC = PopulationRateMonitor(BCs)
-    StateM_BC = StateMonitor(BCs, "vm", record=[nBCs/2], dt=0.1*ms)
+    if report_currents:
+        StateM_BC = StateMonitor(BCs, variables=["vm", "g_ampa", "g_gaba"], record=[nBCs/2], dt=0.1*ms)
+    else:
+        StateM_BC = StateMonitor(BCs, "vm", record=[nBCs/2], dt=0.1*ms)
 
     run(10000*ms)
 
     return SM_BC, RM_BC, StateM_BC
 
 
-def analyse_results(SM_BC, RM_BC, StateM_BC):
+def analyse_results(SM_BC, RM_BC, StateM_BC, analyse_currents=False):
     """
     Analyses results from simulations (see `detect_oscillations.py`)
-    :param SM_BC, RM_BC, StateM_BC: Brian2 spike and rate monitors of BC population (see `run_simulation()`)
+    :params SM_BC, RM_BC, StateM_BC: Brian2 spike and rate monitors of BC population (see `run_simulation()`)
+    :param analyse_currents: bool flag to analyse currents
+    :return: avg. ripple frequency and ripple power
     """
 
     if SM_BC.num_spikes > 0:  # check if there is any activity
@@ -125,11 +131,17 @@ def analyse_results(SM_BC, RM_BC, StateM_BC):
         avg_ripple_freq_BC, ripple_power_BC = ripple(f_BC, Pxx_BC, slice_idx=[])
         avg_gamma_freq_BC, gamma_power_BC = gamma(f_BC, Pxx_BC, slice_idx=[])
 
-        print "Mean inhibitory rate: %.3f"%mean_rate_BC
         print "Average inh. ripple freq: %.3f"%avg_ripple_freq_BC
         print "Inh. ripple power: %.3f"%ripple_power_BC
-        #print "Average inh. gamma freq: %.3f"%avg_gamma_freq_BC
-        #print "Inh. gamma power: %.3f"%gamma_power_BC
+
+        if analyse_currents:
+            # simplified version of `../helper.py/_estimate_LFP()`
+            t = StateM_BC.t_ * 1000.  # *1000 ms conversion
+            v = StateM_BC[nBCs/2].vm
+            g_exc = StateM_BC[nBCs/2].g_ampa*nS + StateM[i].g_ampaMF*nS
+            i_exc = g_exc * (v - (Erev_E * np.ones_like(v/mV)))  # pA
+            g_inh = StateM_BC[nBCs/2].g_gaba*nS
+            i_inh = g_inh * (v - (Erev_I * np.ones_like(v/mV)))  # pA
 
         plot_PSD(rate_BC, rate_ac_BC, f_BC, Pxx_BC, "BC_population", "green", multiplier_=1)
         plot_zoomed(spike_times_BC, spiking_neurons_BC, rate_BC, "BC_population", "green", multiplier_=1,
@@ -148,7 +160,7 @@ if __name__ == "__main__":
     rate_wE = True
     rate_wI = True
     wE_wI = True
-    delay_dacay = False
+    delay_dacay = True
 
     exc_rates = np.array([2.5, 2.75, 3., 3.25, 3.5, 3.75, 4., 4.25, 4.5])
     ws_BC_I = np.array([4.8, 4.85, 4.9, 4.95, 5., 5.05, 5.1, 5.15, 5.2])
