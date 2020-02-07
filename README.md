@@ -1,10 +1,10 @@
-## Simplified network model of CA3 featuring sequence replay and ripple oscillation
+## Data-driven network model of CA3 - featuring sequence replay and ripple oscillation
 
 To run:
 
     git clone https://github.com/KaliLab/ca3net.git
     cd ca3net
-    pip install -r requirements.txt
+    pip3 install -r requirements.txt
     mkdir figures
     cd scripts
     python generate_spike_train  # generate CA3 like spike trains (as exploration of a maze)

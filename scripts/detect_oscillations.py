@@ -6,7 +6,8 @@ authors: András Ecker, Bence Bagi, Eszter Vértes, Szabolcs Káli last update: 
 
 import pickle
 import numpy as np
-from scipy import signal, misc
+from scipy import signal
+from scipy.special import comb
 import pywt
 from helper import _avg_rate, _estimate_LFP
 
@@ -23,7 +24,7 @@ def _autocorrelation(time_series):
     time_series = time_series - np.mean(time_series)
     autocorrelation = np.correlate(time_series, time_series, mode="same") / var
 
-    return autocorrelation[len(autocorrelation)/2:]
+    return autocorrelation[int(len(autocorrelation)/2):]
 
 
 def _calc_spectrum(time_series, fs, nperseg):
@@ -126,7 +127,7 @@ def _fisher(Pxx):
 
     fisher_g = Pxx.max() / np.sum(Pxx)
     n = len(Pxx); upper_lim = int(np.floor(1. / fisher_g))
-    p_val = np.sum([np.power(-1, i-1) * misc.comb(n, i) * np.power((1-i*fisher_g), n-1) for i in range(1, upper_lim)])
+    p_val = np.sum([np.power(-1, i-1) * comb(n, i) * np.power((1-i*fisher_g), n-1) for i in range(1, upper_lim)])
 
     return p_val
 
@@ -150,7 +151,7 @@ def ripple(f, Pxx, slice_idx=[], p_th=0.05):
             ripple_powers.append((sum(Pxx_ripple) / sum(Pxx[i, :])) * 100)
 
         idx = np.where(np.asarray(p_vals) <= p_th)[0].tolist()
-        if idx:
+        if len(idx) >= 0.25*len(slice_idx):  # if at least 25% are significant
             avg_freq = np.mean(np.asarray(freqs)[idx])
             avg_ripple_freq = f[np.where(150 < f)[0][0] + int(avg_freq)]
         else:
@@ -185,7 +186,7 @@ def gamma(f, Pxx, slice_idx=[], p_th=0.05):
             gamma_powers.append((sum(Pxx_gamma) / sum(Pxx[i, :])) * 100)
 
         idx = np.where(np.asarray(p_vals) <= p_th)[0].tolist()
-        if idx:
+        if len(idx) >= 0.25*len(slice_idx):  # if at least 25% are significant
             avg_freq = np.mean(np.asarray(freqs)[idx])
             avg_gamma_freq = f[np.where(30 < f)[0][0] + int(avg_freq)]
         else:

@@ -18,7 +18,6 @@ from plots import plot_STDP_rule, plot_wmx, plot_wmx_avg, plot_w_distr, save_sel
 
 warnings.filterwarnings("ignore")
 base_path = os.path.sep.join(os.path.abspath("__file__").split(os.path.sep)[:-2])
-
 connection_prob_PC = 0.1
 nPCs = 8000
 

@@ -6,28 +6,8 @@ author: András Ecker, last update: 06.2019
 
 import numpy as np
 from tqdm import tqdm  # progress bar
-from helper import _avg_rate
-from bayesian_decoding import load_tuning_curves, extract_binspikecount, calc_posterior, fit_trajectory, test_significance
-
-
-def _get_consecutive_sublists(list_):
-    """
-    Groups list into sublists of consecutive numbers
-    :param list_: input list to group
-    :return cons_lists: list of lists with consecutive numbers
-    """
-
-    # get upper bounds of consecutive sublists
-    ubs = [x for x,y in zip(list_, list_[1:]) if y-x != 1]
-
-    cons_lists = []; lb = 0
-    for ub in ubs:
-        tmp = [x for x in list_[lb:] if x <= ub]
-        cons_lists.append(tmp)
-        lb += len(tmp)
-    cons_lists.append([x for x in list_[lb:]])
-
-    return cons_lists
+from helper import _avg_rate, _get_consecutive_sublists, load_tuning_curves
+from bayesian_decoding import extract_binspikecount, calc_posterior, fit_trajectory, test_significance
 
 
 def slice_high_activity(rate, th, min_len, bin_=20):
@@ -49,7 +29,7 @@ def slice_high_activity(rate, th, min_len, bin_=20):
             slice_idx.append((tmp[0]*bin_, (tmp[-1]+1)*bin_))
 
     if not slice_idx:
-        print "Sustained high network activity can't be detected (bin size:%i, min length:%.1f and threshold:%.2f)!"%(bin_, min_len, th)
+        print("Sustained high network activity can't be detected (bin size:%i, min length:%.1f and threshold:%.2f)!" % (bin_, min_len, th))
 
     return slice_idx
 
@@ -59,7 +39,7 @@ def replay_linear(spike_times, spiking_neurons, slice_idx, pklf_name, N, delta_t
     Checks if there is sequence replay, using methods originating from Davison et al. 2009 (see more in `bayesian_decoding.py`)
     :param spike_times, spiking_neurons: see `preprocess_monitors()`
     :param slice_idx: time idx used to slice out high activity states (see `slice_high_activity()`)
-    :param pklf_name: filename of saved place fields (used for tuning curves, see `bayesian_decoding/load_tuning_curves()`)
+    :param pklf_name: filename of saved place fields (used for tuning curves, see `helper.py/load_tuning_curves()`)
     :param N: number of shuffled versions tested (significance test, see `bayesian_decoding/test_significance()`)
     :param delta_t: length of time bins used for decoding (in ms)
     :param t_incr: increment of time bins (see `bayesian_decoding/extract_binspikecount()`)

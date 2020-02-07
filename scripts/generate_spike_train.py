@@ -8,7 +8,7 @@ import os, pickle
 import numpy as np
 from tqdm import tqdm  # progress bar
 from poisson_proc import hom_poisson, inhom_poisson
-from helper import save_place_fields, refractoriness
+from helper import save_place_fields, refractoriness 
 
 
 base_path = os.path.sep.join(os.path.abspath(__file__).split(os.path.sep)[:-2])

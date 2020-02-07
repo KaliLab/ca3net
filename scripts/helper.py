@@ -8,8 +8,7 @@ import os, pickle
 import numpy as np
 import pywt
 from brian2.units import *
-from poisson_proc import hom_poisson
-from bayesian_decoding import load_tuning_curves, extract_binspikecount, calc_posterior, fit_trajectory, test_significance
+from poisson_proc import hom_poisson, get_tuning_curve_linear
 
 
 base_path = os.path.sep.join(os.path.abspath("__file__").split(os.path.sep)[:-2])
@@ -109,7 +108,7 @@ def merge_PF_starts():
         place_fields_no = pickle.load(f)
 
     n = 0
-    for i, PF_start_no in place_fields_no.iteritems():
+    for i, PF_start_no in place_fields_no.items():
         if i in place_fields:
             PF_start = place_fields[i]
             place_fields[i] = [PF_start, PF_start_no]
@@ -117,7 +116,7 @@ def merge_PF_starts():
         else:
             place_fields[i] = PF_start_no
 
-    print "%i cells have place fields in both envs."%n
+    print("%i cells have place fields in both envs." % n)
 
     pklf_name = os.path.join(base_path, "files", "PFstarts_0.5_2envs_linear.pkl")
     with open(pklf_name, "wb") as f:
@@ -340,7 +339,7 @@ def load_spike_trains(npzf_name):
     :return spiking_neurons, spike_times: same spike trains converted into SpikeGeneratorGroup format
     """
 
-    npz_f = np.load(npzf_name)
+    npz_f = np.load(npzf_name, allow_pickle=True)
     spike_trains = npz_f["spike_trains"]
 
     spiking_neurons = 0 * np.ones_like(spike_trains[0])
@@ -351,6 +350,45 @@ def load_spike_trains(npzf_name):
         spike_times = np.concatenate((spike_times, np.asarray(spike_trains[neuron_id])), axis=0)
 
     return spiking_neurons, spike_times
+
+
+def _load_PF_starts(pklf_name):
+    """
+    Loads in saved place field starting points [rad]
+    :param pklf_name: filename of saved place fields
+    :return: place_fields: dict neuronID: place field start (saved in `generate_spike_trains.py`)
+    """
+
+    with open(pklf_name, "rb") as f:
+        place_fields = pickle.load(f)
+
+    return place_fields
+
+
+def load_tuning_curves(pklf_name, spatial_points):
+    """
+    Loads in tau_i(x) tuning curves (used for generating 'teaching' spike train, see `poisson_proc.py`)
+    (Can handle multiple place fields in different environments)
+    :param pklf_name: see `_load_PF_starts`
+    :param spatial_points: spatial coordinates to evaluate the tuning curves
+    :return: tuning_curves: dict of tuning curves {neuronID: tuning curve}
+    """
+
+    place_fields = _load_PF_starts(pklf_name)
+    #tuning_curves = {neuron_id: get_tuning_curve_linear(spatial_points, phi_start) for neuron_id, phi_start in place_fields.items()}
+    tuning_curves = {}
+    for neuron_id, phi_start in place_fields.items():
+        if type(phi_start) != list:
+            tuning_curves[neuron_id] = get_tuning_curve_linear(spatial_points, phi_start)
+        else:  # multiple envs.
+            tuning_curves_ = np.zeros((len(phi_start), len(spatial_points)))
+            for i, phi_start_ in enumerate(phi_start):
+                tuning_curves_[i, :] = get_tuning_curve_linear(spatial_points, phi_start_)
+            tuning_curve = np.sum(tuning_curves_, axis=0)
+            tuning_curve[np.where(tuning_curve > 1.)] = 1.
+            tuning_curves[neuron_id] = tuning_curve
+
+    return tuning_curves
 
 
 # ========== misc. ==========
@@ -375,15 +413,35 @@ def refractoriness(spike_trains, ref_per=5e-3):
             single_spike_train_updated = single_spike_train
         spike_trains_updated.append(single_spike_train_updated)
 
-    print "%i spikes deleted becuse of too short refractory period"%count
+    print("%i spikes deleted becuse of too short refractory period" % count)
 
     return spike_trains_updated
+
+
+def _get_consecutive_sublists(list_):
+    """
+    Groups list into sublists of consecutive numbers
+    :param list_: input list to group
+    :return cons_lists: list of lists with consecutive numbers
+    """
+
+    # get upper bounds of consecutive sublists
+    ubs = [x for x,y in zip(list_, list_[1:]) if y-x != 1]
+
+    cons_lists = []; lb = 0
+    for ub in ubs:
+        tmp = [x for x in list_[lb:] if x <= ub]
+        cons_lists.append(tmp)
+        lb += len(tmp)
+    cons_lists.append([x for x in list_[lb:]])
+
+    return cons_lists
 
 
 def argmin_time_arrays(time_short, time_long):
     """
     Finds closest elements in differently sampled time arrays (used for step size analysis...)
-    TODO: add some error managements here....
+    TODO: add some error management here....
     :param time_short: time array with less elements
     :param time_long: time array with more elements (in the same range)
     :return: idx of long array, to get closest elements to short array

@@ -261,7 +261,7 @@ def plot_zoomed(spike_times, spiking_neurons, rate, title_, color_, multiplier_,
                     id_ = i
                     break
         else:  # for Bas. pop we always plot the same cell
-            id_ = nBCs/2  # fixed in simulations
+            id_ = int(nBCs/2)  # fixed in simulations
             idx = np.where(np.asarray(spiking_neurons)==id_)[0]  # spike times of given neuron (used for red dots on scatter)
         t = StateM.t_ * 1000.  # *1000 ms convertion
         v = StateM[id_].vm*1000  # *1000 mV conversion
@@ -590,7 +590,7 @@ def plot_w_distr(wmx, save_name):
     # deleting nulls from wmx to plot the distribution of the weights
     wmx_nonzero = wmx[np.nonzero(wmx)]*1e9  # nS conversion
     log10wmx_nonzero = np.log10(wmx_nonzero)
-    print "mean(nonzero weights): %s (nS)"%np.mean(wmx_nonzero)
+    print("mean(nonzero weights): %s (nS)" % np.mean(wmx_nonzero))
 
     fig = plt.figure(figsize=(10, 8))
 

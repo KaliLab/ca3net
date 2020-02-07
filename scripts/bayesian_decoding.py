@@ -2,7 +2,7 @@
 """
 Functions used for estimating position from spike trains and fitting trajectory of the animal (used for sequence replay detection)
 based on: Davison et al. 2009 (the difference is that the tau_i(x) tuning curves are known here, since we generated them... see: `poisson_proc.py`)
-author: András Ecker last update: 01.2019
+author: András Ecker last update: 01.2020
 """
 
 import os, copy, pickle
@@ -11,49 +11,10 @@ import random as pyrandom
 from scipy.signal import convolve2d
 from scipy.special import factorial
 import multiprocessing as mp
-from poisson_proc import get_tuning_curve_linear
+from helper import load_tuning_curves
 
 
 infield_rate = 20.0  # avg. in-field firing rate [Hz]
-
-
-def _load_PF_starts(pklf_name):
-    """
-    Loads in saved place field starting points [rad]
-    :param pklf_name: filename of saved place fields
-    :return: place_fields: dict neuronID: place field start (saved in `generate_spike_trains.py`)
-    """
-
-    with open(pklf_name, "rb") as f:
-        place_fields = pickle.load(f)
-
-    return place_fields
-
-
-def load_tuning_curves(pklf_name, spatial_points):
-    """
-    Loads in tau_i(x) tuning curves (used for generating 'teaching' spike train, see `poisson_proc.py`)
-    (Can handle multiple place fields in different environments)
-    :param pklf_name: see `_load_PF_starts`
-    :param spatial_points: spatial coordinates to evaluate the tuning curves
-    :return: tuning_curves: dict of tuning curves {neuronID: tuning curve}
-    """
-
-    place_fields = _load_PF_starts(pklf_name)
-    #tuning_curves = {neuron_id: get_tuning_curve_linear(spatial_points, phi_start) for neuron_id, phi_start in place_fields.iteritems()}
-    tuning_curves = {}
-    for neuron_id, phi_start in place_fields.iteritems():
-        if type(phi_start) != list:
-            tuning_curves[neuron_id] = get_tuning_curve_linear(spatial_points, phi_start)
-        else:
-            tuning_curves_ = np.zeros((len(phi_start), len(spatial_points)))
-            for i, phi_start_ in enumerate(phi_start):
-                tuning_curves_[i, :] = get_tuning_curve_linear(spatial_points, phi_start_)
-            tuning_curve = np.sum(tuning_curves_, axis=0)
-            tuning_curve[np.where(tuning_curve > 1.)] = 1.
-            tuning_curves[neuron_id] = tuning_curve
-
-    return tuning_curves
 
 
 def extract_binspikecount(lb, ub, delta_t, t_incr, spike_times, spiking_neurons, tuning_curves):
@@ -92,28 +53,27 @@ def calc_posterior(bin_spike_counts, tuning_curves, delta_t):
     (It actually implements it via log(likelihoods) for numerical stability)
     Assumptions: independent neurons; firing rates modeled with Poisson processes
     Vectorized implementation using only the spiking neurons in each bin (plus taking only the highest fraction before summing...)
-    #TODO: maybe update prior insted of leaving it uniform?
     :param bin_spike_counts: list (1 entry for every time bin) of spike dictionaries {i: n_i} (see `extract_binspikecount()`)
-    :param tuning_curves: dictionary of tuning curves {neuronID: tuning curve} (see `load_tuning_curves()`)
+    :param tuning_curves: dictionary of tuning curves {neuronID: tuning curve} (see `helper.py/load_tuning_curves()`)
     :param delta_t: delta t used for binning spikes (in ms)
     return: X_posterior: spatial_resolution*temporal_resolution array with calculated posterior probability Pr(x|spikes)
     """
 
     delta_t *= 1e-3  # convert back to second
-    n_spatial_points = tuning_curves[pyrandom.sample(tuning_curves, 1)[0]].shape[0]
+    n_spatial_points = pyrandom.sample(list(tuning_curves.values()), 1)[0].shape[0]
 
     X_posterior = np.zeros((n_spatial_points, len(bin_spike_counts)))  # dim:x*t
 
     # could be a series of 3d array operations instead of this for loop...
-    # ...but since only a portion of the 8000 neurons are spiking in every bin this one is faster
+    # ...but since only a portion of the 8000 neurons are spiking in every bin this one might be even faster
     for t, spikes in enumerate(bin_spike_counts):
 
         # prepare broadcasted variables
-        n_spiking_neurons = len(spikes.keys())
+        n_spiking_neurons = len(spikes)
         expected_spikes = np.zeros((n_spatial_points, n_spiking_neurons))  # dim:x*i_spiking
         n_spikes = np.zeros_like(expected_spikes)  # dim:x*i_spiking
         n_factorials = np.ones_like(expected_spikes)  # dim:x*i_spiking
-        for j, (neuron_id, n_spike) in enumerate(spikes.iteritems()):
+        for j, (neuron_id, n_spike) in enumerate(spikes.items()):
             tuning_curve = tuning_curves[neuron_id] * infield_rate
             tuning_curve[np.where(tuning_curve <= 0.1)] = 0.1
             expected_spikes[:, j] = tuning_curve * delta_t
@@ -124,8 +84,9 @@ def calc_posterior(bin_spike_counts, tuning_curves, delta_t):
         likelihoods = np.multiply(expected_spikes, 1.0/n_factorials)
         likelihoods = np.multiply(n_spikes, np.log(likelihoods))
         likelihoods = likelihoods - delta_t * expected_spikes
-        tmp = np.partition(likelihoods, 20, axis=1)
-        likelihoods = tmp[:, -20:]  # take only the 20 highest values for numerical stability
+        likelihoods.sort(axis=1, kind="mergsort")
+        if likelihoods.shape[1] > 100:
+            likelihoods = likelihoods[:, -100:]  # take only the 100 highest values for numerical stability
         likelihoods = np.sum(likelihoods, axis=1)
         likelihoods -= np.max(likelihoods)  # normalize before exp()
         likelihoods = np.exp(likelihoods)
@@ -185,7 +146,7 @@ def fit_trajectory(X_posterior, slope_lims=(0.5, 3), grid_res=100):
              best_params: slope and offset parameter corresponding to the highest R
     """
 
-    slopes = np.concatenate((np.linspace(-slope_lims[1], -slope_lims[0], grid_res/2.0), np.linspace(slope_lims[0], slope_lims[1], grid_res/2.0)))
+    slopes = np.concatenate((np.linspace(-slope_lims[1], -slope_lims[0], int(grid_res/2.)), np.linspace(slope_lims[0], slope_lims[1], int(grid_res/2.))))
     offsets = np.linspace(-0.5*X_posterior.shape[0], X_posterior.shape[0]*1.5, grid_res)
     t = np.arange(0, X_posterior.shape[1])
 
@@ -209,8 +170,8 @@ def _shuffle_tuning_curves(tuning_curves, seed):
     :param seed: random seed for shuffling
     """
 
-    keys = tuning_curves.keys()
-    vals = tuning_curves.values()
+    keys = list(tuning_curves.keys())
+    vals = list(tuning_curves.values())
 
     np.random.seed(seed)
     np.random.shuffle(keys)

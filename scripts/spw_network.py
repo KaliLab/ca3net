@@ -104,7 +104,6 @@ a_BC = 3.05640210724374 * nS
 b_BC = 0.916098931234532 * pA
 tau_w_BC = 178.581099914024 * ms
 
-
 eqs_PC = """
 dvm/dt = (-g_leak_PC*(vm-Vrest_PC) + g_leak_PC*delta_T_PC*exp((vm- theta_PC)/delta_T_PC) - w - ((g_ampa+g_ampaMF)*z*(vm-Erev_E) + g_gaba*z*(vm-Erev_I)))/Cm_PC : volt (unless refractory)
 dw/dt = (a_PC*(vm-Vrest_PC) - w) / tau_w_PC : amp
@@ -243,17 +242,17 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC,
             replay, _ = replay_circular(ISI_hist_PC[replay_ROI])
         else:
             if verbose:
-                print "Detecting replay..."
+                print("Detecting replay...")
             slice_idx = slice_high_activity(rate_PC, th=2, min_len=260)
             plot_raster(spike_times_PC, spiking_neurons_PC, rate_PC, [ISI_hist_PC, bin_edges_PC], slice_idx, "blue", multiplier_=multiplier)
-            replay, replay_results = replay_linear(spike_times_PC, spiking_neurons_PC, slice_idx, pklf_name, N=9)
+            replay, replay_results = replay_linear(spike_times_PC, spiking_neurons_PC, slice_idx, pklf_name, N=30)
             if slice_idx:
                 if os.path.isdir(dir_name):
                     shutil.rmtree(dir_name)
                     os.mkdir(dir_name)
                 else:
                     os.mkdir(dir_name)
-                for bounds, tmp in replay_results.iteritems():
+                for bounds, tmp in replay_results.items():
                     fig_name = os.path.join(dir_name, "%i-%i_replay.png"%(bounds[0], bounds[1]))
                     plot_posterior_trajectory(tmp["X_posterior"], tmp["fitted_path"], tmp["R"], fig_name)
             if save:
@@ -302,17 +301,17 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC,
 
         if verbose:
             if not np.isnan(replay):
-                print "Replay detected!"
+                print("Replay detected!")
             else:
-                print "No replay..."
-            print "Mean excitatory rate: %.3f"%mean_rate_PC
-            print "Mean inhibitory rate: %.3f"%mean_rate_BC
-            print "Average exc. ripple freq: %.3f"%avg_ripple_freq_PC
-            print "Exc. ripple power: %.3f"%ripple_power_PC
-            print "Average inh. ripple freq: %.3f"%avg_ripple_freq_BC
-            print "Inh. ripple power: %.3f"%ripple_power_BC
-            print "Average LFP ripple freq: %.3f"%avg_ripple_freq_LFP
-            print "LFP ripple power: %.3f"%ripple_power_LFP
+                print("No replay...")
+            print("Mean excitatory rate: %.3f" % mean_rate_PC)
+            print("Mean inhibitory rate: %.3f" % mean_rate_BC)
+            print("Average exc. ripple freq: %.3f" % avg_ripple_freq_PC)
+            print("Exc. ripple power: %.3f" % ripple_power_PC)
+            print("Average inh. ripple freq: %.3f" % avg_ripple_freq_BC)
+            print("Inh. ripple power: %.3f" % ripple_power_BC)
+            print("Average LFP ripple freq: %.3f" % avg_ripple_freq_LFP)
+            print("LFP ripple power: %.3f" % ripple_power_LFP)
 
         return [multiplier, replay, mean_rate_PC, mean_rate_BC,
                 avg_ripple_freq_PC, ripple_power_PC, avg_ripple_freq_BC, ripple_power_BC, avg_ripple_freq_LFP, ripple_power_LFP,
@@ -321,7 +320,7 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC,
 
     else:
         if verbose:
-            print "No activity!"
+            print("No activity!")
         return [np.nan for i in range(20)]
 
 
@@ -344,11 +343,10 @@ if __name__ == "__main__":
     save = True; cue = False; verbose = True; TFR = False
 
     pklf_name = os.path.join(base_path, "files", f_in)
-    wmx_PC_E = load_wmx(pklf_name) * 1e9 # *1e9 nS conversion
+    wmx_PC_E = load_wmx(pklf_name) * 1e9  # *1e9 nS conversion
 
     SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC = run_simulation(wmx_PC_E, STDP_mode,
                                                                                  cue=cue, save=save, seed=seed, verbose=verbose)
     _ = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC, seed=seed,
                         multiplier=1, linear=linear, pklf_name=PF_pklf_name, dir_name=dir_name, TFR=TFR, save=save, verbose=verbose)
-
     plt.show()
