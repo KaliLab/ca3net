@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 """
 Weight matrix modifications
-author: András Ecker last update: 08.2018
+author: András Ecker last update: 07.2020
 """
 
 import os, sys
@@ -46,7 +46,7 @@ def column_shuffle(wmx_orig):
     return wmx_modified.T
 
 
-def binarize(wmx_orig, ratio=0.04):
+def binarize(wmx_orig, ratio=0.03):
     """
     Makes the matrix binary by averaging the highest x and the lowest 1-x part of the nonzero weights
     :param wmx_orig: original weight matrix
@@ -55,32 +55,22 @@ def binarize(wmx_orig, ratio=0.04):
     """
 
     # sort non-zero values, get avg of min and max weights
-    wmx_orig_nonzero = wmx_orig[np.nonzero(wmx_orig)].tolist()
-    n_nonzero = len(wmx_orig_nonzero)
+    nonzero_idx = np.nonzero(wmx_orig)
+    nonzero = wmx_orig[nonzero_idx]
+    th = int(len(nonzero) * (1-ratio))  # binarization threshold
+    weights = np.sort(nonzero, kind="mergsort")
+    min_ = np.mean(weights[:th])
+    max_ = np.mean(weights[th:])
 
-    th_idx = int(n_nonzero * ratio)
-    wmx_orig_nonzero.sort(reverse=True)
-    max_ = np.mean(wmx_orig_nonzero[:th_idx])
-    min_ = np.mean(wmx_orig_nonzero[th_idx:])
-    print min_, max_
-
-    # create binary weight matrix
-    wmx_modified = np.zeros((nPCs, nPCs))
-
-    for i in range(0, nPCs):
-        row_orig = wmx_orig[i, :]
-        row_modified = np.zeros_like(row_orig)
-
-        idx_nonzero = np.nonzero(row_orig)[0]
-        row_modified[idx_nonzero] = min_
-
-        n_row_nonzero = idx_nonzero.shape[0]
-        th_row_idx = int(n_row_nonzero * ratio)
-
-        max_idx = np.argpartition(row_orig, -th_row_idx)[-th_row_idx:]  # numpy magic to get out the idx of the n highest values
-        row_modified[max_idx] = max_
-
-        wmx_modified[i, :] = row_modified
+    # create weight matrix filled with the min value
+    wmx_modified_min = np.zeros((nPCs, nPCs))
+    wmx_modified_min[nonzero_idx] = min_
+    tmp = wmx_modified_min.flatten()
+    # update max values in the weight matrix
+    N = int(len(nonzero) * ratio)
+    max_idx = np.argpartition(wmx_orig.flatten(), -N)[-N:]  # numpy magic to get the idx of N max values
+    tmp[max_idx] = max_
+    wmx_modified = np.reshape(tmp, (nPCs, nPCs))
 
     return wmx_modified
 
@@ -134,13 +124,12 @@ if __name__ == "__main__":
     wmx_orig = load_wmx(pklf_name)
 
     #wmx_modified = shuffle(wmx_orig); f_out = "%s_shuffled_linear.pkl"%f_in[:-11] if linear else "%s_shuffled.pkl"%f_in[:-4]
-    wmx_modified = column_shuffle(wmx_orig); f_out = "%s_cshuffled_linear.pkl"%f_in[:-11] if linear else "%s_cshuffled.pkl"%f_in[:-4]
-    #wmx_modified = binarize(wmx_orig); f_out = "%s_binary_linear.pkl"%f_in[:-11] if linear else "%s_binary.pkl"%f_in[:-4]
+    #wmx_modified = column_shuffle(wmx_orig); f_out = "%s_cshuffled_linear.pkl"%f_in[:-11] if linear else "%s_cshuffled.pkl"%f_in[:-4]
     #wmx_modified = shuffle_blocks(wmx_orig); f_out = "%s_block_shuffled_linear.pkl"%f_in[:-11] if linear else "%s_block_shuffled.pkl"%f_in[:-4]
+    wmx_modified = binarize(wmx_orig); f_out = "%s_binary_linear.pkl"%f_in[:-11] if linear else "%s_binary.pkl"%f_in[:-4]
 
     assert np.shape(wmx_modified) == (nPCs, nPCs), "Output shape is not %i*%i"%(nPCs, nPCs)
     assert (wmx_modified >= 0.0).all(), "Negative weights in the modified matrix!"
-
 
     pklf_name = os.path.join(base_path, "files", f_out)
     save_wmx(wmx_modified, pklf_name)
