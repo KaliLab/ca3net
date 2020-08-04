@@ -31,11 +31,11 @@ if __name__ == "__main__":
     linear = True
     seed = 12345
 
-    f_in = "wmx_%s_%.1f_linear.pkl"%(STDP_mode, place_cell_ratio); multipliers = [0.8, 0.85, 0.9, 0.95, 1., 1.05, 1.1, 1.15, 1.2]
-    #f_in = "wmx_%s_%.1f_2envs_linear.pkl"%(STDP_mode, place_cell_ratio)#; multipliers = [0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1., 1.05, 1.1]
-    #f_in = "wmx_%s_%.1f_cshuffled_linear.pkl"%(STDP_mode, place_cell_ratio)#; multipliers = [1., 1.5, 2., 2.5, 3., 3.25, 3.5, 3.75, 4.]
-    #f_in = "wmx_%s_%.1f_binary_linear.pkl"%(STDP_mode, place_cell_ratio)#; multipliers = [1, 1.2, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.]
-    print f_in
+    #f_in = "wmx_%s_%.1f_linear.pkl"%(STDP_mode, place_cell_ratio); multipliers = [0.8, 0.85, 0.9, 0.95, 1., 1.05, 1.1, 1.15, 1.2]
+    #f_in = "wmx_%s_%.1f_2envs_linear.pkl"%(STDP_mode, place_cell_ratio); multipliers = [0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1., 1.05, 1.1]
+    #f_in = "wmx_%s_%.1f_cshuffled_linear.pkl"%(STDP_mode, place_cell_ratio); multipliers = [1., 1.5, 2., 2.5, 3., 3.25, 3.5, 3.75, 4.]
+    f_in = "wmx_%s_%.1f_binary_linear.pkl"%(STDP_mode, place_cell_ratio); multipliers = [0.9, 0.95, 1., 1.05, 1.1, 1.15, 1.2, 1.25, 1.3]
+    print(f_in)
     PF_pklf_name = os.path.join(base_path, "files", "PFstarts_%s_linear.pkl"%place_cell_ratio) if linear else None
     f_out = "%s_%s.txt"%(f_in[4:-4], seed)
 
@@ -46,7 +46,7 @@ if __name__ == "__main__":
 
     results = np.zeros((len(multipliers), 20))
     for i, multiplier in enumerate(multipliers):
-        print "multiplier: %.2f"%multiplier
+        print("multiplier: %.2f"%multiplier)
         dir_name = os.path.join(base_path, "figures", "%.2f_replay_det_%s_%.1f"%(multiplier, STDP_mode, place_cell_ratio)) if linear else None
 
         SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC = run_simulation(wmx_PC_E*multiplier, STDP_mode,
