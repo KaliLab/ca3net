@@ -5,13 +5,16 @@ runs simulation and checks the dynamics
 authors: András Ecker, Bence Bagi, Szabolcs Káli last update: 07.2019
 """
 
-import os, sys, shutil
+import os
+import sys
+import shutil
 import numpy as np
 import random as pyrandom
 from brian2 import *
 prefs.codegen.target = "numpy"
 import matplotlib.pyplot as plt
-from helper import load_wmx, preprocess_monitors, generate_cue_spikes, save_vars, save_PSD, save_TFR, save_LFP, save_replay_analysis
+from helper import load_wmx, preprocess_monitors, generate_cue_spikes,\
+                   save_vars, save_PSD, save_TFR, save_LFP, save_replay_analysis
 from detect_replay import replay_circular, slice_high_activity, replay_linear
 from detect_oscillations import analyse_rate, ripple_AC, ripple, gamma, calc_TFR, analyse_estimated_LFP
 from plots import plot_raster, plot_posterior_trajectory, plot_PSD, plot_TFR, plot_zoomed, plot_detailed, plot_LFP
@@ -75,7 +78,7 @@ spike_th_PC = theta_PC + 5 * delta_T_PC
 a_PC = -0.274347065652738 * nS
 b_PC = 206.841448096415 * pA
 tau_w_PC = 84.9358017225512 * ms
-"""
+""" comment this back to run with ExpIF PC model...
 # ExpIF parameters for PCs (optimized by Szabolcs)
 g_leak_PC = 4.88880734814042 * nS
 tau_mem_PC = 70.403501012992 * ms
@@ -141,16 +144,15 @@ def run_simulation(wmx_PC_E, STDP_mode, cue, save, seed, verbose=True):
     pyrandom.seed(seed)
 
     # synaptic weights (see `/optimization/optimize_network.py`)
+    w_PC_I = 0.65  # nS
+    w_BC_E = 0.85
+    w_BC_I = 5.
     if STDP_mode == "asym":
-        w_PC_I = 0.65 # nS
-        w_BC_E = 0.85
-        w_BC_I = 5.
         w_PC_MF = 21.5
     elif STDP_mode == "sym":
-        w_PC_I = 0.65  # nS
-        w_BC_E = 0.85
-        w_BC_I = 5.
         w_PC_MF = 19.15
+    else:
+        raise ValueError("STDP_mode has to be either 'sym' or 'asym'!")
 
     PCs = NeuronGroup(nPCs, model=eqs_PC, threshold="vm>spike_th_PC",
                       reset="vm=Vreset_PC; w+=b_PC", refractory=tref_PC, method="exponential_euler")
@@ -228,12 +230,12 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC,
         spike_times_PC, spiking_neurons_PC, rate_PC, ISI_hist_PC, bin_edges_PC = preprocess_monitors(SM_PC, RM_PC)
         spike_times_BC, spiking_neurons_BC, rate_BC = preprocess_monitors(SM_BC, RM_BC, calc_ISI=False)
         if not linear:
-            plot_raster(spike_times_PC, spiking_neurons_PC, rate_PC, [ISI_hist_PC, bin_edges_PC], None, "blue", multiplier_=multiplier)
-
-        subset = plot_zoomed(spike_times_PC, spiking_neurons_PC, rate_PC, "PC_population", "blue", multiplier_=multiplier,
-                             StateM=StateM_PC, selection=selection)
-        plot_zoomed(spike_times_BC, spiking_neurons_BC, rate_BC, "BC_population", "green", multiplier_=multiplier,
-                    PC_pop=False, StateM=StateM_BC)
+            plot_raster(spike_times_PC, spiking_neurons_PC, rate_PC, [ISI_hist_PC, bin_edges_PC], None, "blue",
+                        multiplier_=multiplier)
+        subset = plot_zoomed(spike_times_PC, spiking_neurons_PC, rate_PC, "PC_population", "blue",
+                             multiplier_=multiplier, StateM=StateM_PC, selection=selection)
+        plot_zoomed(spike_times_BC, spiking_neurons_BC, rate_BC, "BC_population", "green",
+                    multiplier_=multiplier, PC_pop=False, StateM=StateM_BC)
         plot_detailed(StateM_PC, subset, multiplier_=multiplier)
 
         if not linear:
@@ -241,10 +243,9 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC,
             replay_ROI = np.where((150 <= bin_edges_PC) & (bin_edges_PC <= 850))
             replay, _ = replay_circular(ISI_hist_PC[replay_ROI])
         else:
-            if verbose:
-                print("Detecting replay...")
             slice_idx = slice_high_activity(rate_PC, th=2, min_len=260)
-            plot_raster(spike_times_PC, spiking_neurons_PC, rate_PC, [ISI_hist_PC, bin_edges_PC], slice_idx, "blue", multiplier_=multiplier)
+            plot_raster(spike_times_PC, spiking_neurons_PC, rate_PC, [ISI_hist_PC, bin_edges_PC], slice_idx, "blue",
+                        multiplier_=multiplier)
             replay, replay_results = replay_linear(spike_times_PC, spiking_neurons_PC, slice_idx, pklf_name, N=30)
             if slice_idx:
                 if os.path.isdir(dir_name):
@@ -253,7 +254,7 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC,
                 else:
                     os.mkdir(dir_name)
                 for bounds, tmp in replay_results.items():
-                    fig_name = os.path.join(dir_name, "%i-%i_replay.png"%(bounds[0], bounds[1]))
+                    fig_name = os.path.join(dir_name, "%i-%i_replay.png" % (bounds[0], bounds[1]))
                     plot_posterior_trajectory(tmp["X_posterior"], tmp["fitted_path"], tmp["R"], fig_name)
             if save:
                 save_replay_analysis(replay, replay_results, seed)
@@ -275,17 +276,20 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC,
             coefs_BC, freqs_BC = calc_TFR(rate_BC, 1000., slice_idx)
             coefs_LFP, freqs_LFP = calc_TFR(LFP[::10].copy(), 1000., slice_idx)
             if not linear:
-                plot_TFR(coefs_PC, freqs_PC, "PC_population", os.path.join(base_path, figures, "%.2f_PC_population_wt.png"%multiplier))
-                plot_TFR(coefs_BC, freqs_BC, "BC_population", os.path.join(base_path, figures, "%.2f_BC_population_wt.png"%multiplier))
-                plot_TFR(coefs_LFP, freqs_LFP, "LFP", os.path.join(base_path, figures, "%.2f_LFP_wt.png"%multiplier))
+                plot_TFR(coefs_PC, freqs_PC, "PC_population",
+                         os.path.join(base_path, "figures", "%.2f_PC_population_wt.png" % multiplier))
+                plot_TFR(coefs_BC, freqs_BC, "BC_population",
+                         os.path.join(base_path, "figures", "%.2f_BC_population_wt.png" % multiplier))
+                plot_TFR(coefs_LFP, freqs_LFP, "LFP",
+                         os.path.join(base_path, "figures", "%.2f_LFP_wt.png" % multiplier))
             else:
                 if slice_idx:
                     for i, bounds in enumerate(slice_idx):
-                        fig_name = os.path.join(dir_name, "%i-%i_PC_population_wt.png"%(bounds[0], bounds[1]))
+                        fig_name = os.path.join(dir_name, "%i-%i_PC_population_wt.png" % (bounds[0], bounds[1]))
                         plot_TFR(coefs_PC[i], freqs_PC, "PC_population", fig_name)
-                        fig_name = os.path.join(dir_name, "%i-%i_BC_population_wt.png"%(bounds[0], bounds[1]))
+                        fig_name = os.path.join(dir_name, "%i-%i_BC_population_wt.png" % (bounds[0], bounds[1]))
                         plot_TFR(coefs_BC[i], freqs_PC, "BC_population", fig_name)
-                        fig_name = os.path.join(dir_name, "%i-%i_LFP_wt.png"%(bounds[0], bounds[1]))
+                        fig_name = os.path.join(dir_name, "%i-%i_LFP_wt.png" % (bounds[0], bounds[1]))
                         plot_TFR(coefs_LFP[i], freqs_LFP, "LFP", fig_name)
             if save:
                 save_TFR(freqs_PC, coefs_PC, freqs_BC, coefs_BC, freqs_LFP, coefs_LFP, seed)
@@ -314,14 +318,15 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC,
             print("LFP ripple power: %.3f" % ripple_power_LFP)
 
         return [multiplier, replay, mean_rate_PC, mean_rate_BC,
-                avg_ripple_freq_PC, ripple_power_PC, avg_ripple_freq_BC, ripple_power_BC, avg_ripple_freq_LFP, ripple_power_LFP,
-                avg_gamma_freq_PC, gamma_power_PC, avg_gamma_freq_BC, gamma_power_BC, avg_gamma_freq_LFP, gamma_power_LFP,
+                avg_ripple_freq_PC, ripple_power_PC, avg_ripple_freq_BC,
+                ripple_power_BC, avg_ripple_freq_LFP, ripple_power_LFP,
+                avg_gamma_freq_PC, gamma_power_PC, avg_gamma_freq_BC,
+                gamma_power_BC, avg_gamma_freq_LFP, gamma_power_LFP,
                 max_ac_PC, max_ac_ripple_PC, max_ac_BC, max_ac_ripple_BC]
-
     else:
         if verbose:
             print("No activity!")
-        return [np.nan for i in range(20)]
+        return [np.nan for _ in range(20)]
 
 
 if __name__ == "__main__":
@@ -331,22 +336,22 @@ if __name__ == "__main__":
     except:
         STDP_mode = "sym"
     assert STDP_mode in ["sym", "asym"]
-
-    place_cell_ratio = 0.5
+    save = False
+    cue = False
+    verbose = True
+    TFR = False
     linear = True
+    place_cell_ratio = 0.5
     seed = 12345
 
-    f_in = "wmx_%s_%.1f_linear.pkl"%(STDP_mode, place_cell_ratio) if linear else "wmx_%s_%.1f.pkl"%(STDP_mode, place_cell_ratio)
-    PF_pklf_name = os.path.join(base_path, "files", "PFstarts_%s_linear.pkl"%place_cell_ratio) if linear else None
-    dir_name = os.path.join(base_path, "figures", "%.2f_replay_det_%s_%.1f"%(1, STDP_mode, place_cell_ratio)) if linear else None
+    f_in = "wmx_%s_%.1f_linear.pkl"%(STDP_mode, place_cell_ratio) if linear else "wmx_%s_%.1f.pkl" % (STDP_mode, place_cell_ratio)
+    PF_pklf_name = os.path.join(base_path, "files", "PFstarts_%s_linear.pkl" % place_cell_ratio) if linear else None
+    dir_name = os.path.join(base_path, "figures", "%.2f_replay_det_%s_%.1f" % (1, STDP_mode, place_cell_ratio)) if linear else None
 
-    save = True; cue = False; verbose = True; TFR = False
-
-    pklf_name = os.path.join(base_path, "files", f_in)
-    wmx_PC_E = load_wmx(pklf_name) * 1e9  # *1e9 nS conversion
-
-    SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC = run_simulation(wmx_PC_E, STDP_mode,
-                                                                                 cue=cue, save=save, seed=seed, verbose=verbose)
+    wmx_PC_E = load_wmx(os.path.join(base_path, "files", f_in)) * 1e9  # *1e9 nS conversion
+    SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC = run_simulation(wmx_PC_E, STDP_mode, cue=cue,
+                                                                                 save=save, seed=seed, verbose=verbose)
     _ = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC, seed=seed,
-                        multiplier=1, linear=linear, pklf_name=PF_pklf_name, dir_name=dir_name, TFR=TFR, save=save, verbose=verbose)
+                        multiplier=1, linear=linear, pklf_name=PF_pklf_name, dir_name=dir_name, TFR=TFR,
+                        save=save, verbose=verbose)
     plt.show()
