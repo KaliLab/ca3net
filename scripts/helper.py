@@ -4,7 +4,9 @@ Helper functions used here and there
 author: András Ecker, last update: 06.2019
 """
 
-import os, pickle
+import os
+import pickle
+from copy import deepcopy
 import numpy as np
 import pywt
 from brian2.units import *
@@ -101,11 +103,11 @@ def merge_PF_starts():
 
     pklf_name = os.path.join(base_path, "files", "PFstarts_0.5_linear.pkl")
     with open(pklf_name, "rb") as f:
-        place_fields = pickle.load(f)
+        place_fields = pickle.load(f, encoding="latin1")
 
     pklf_name = os.path.join(base_path, "files", "PFstarts_0.5_linear_no.pkl")
     with open(pklf_name, "rb") as f:
-        place_fields_no = pickle.load(f)
+        place_fields_no = pickle.load(f, encoding="latin1")
 
     n = 0
     for i, PF_start_no in place_fields_no.items():
@@ -132,26 +134,33 @@ def reorder_spiking_neurons(spiking_neurons, pklf_name_tuning_curves):
     """
 
     with open(pklf_name_tuning_curves, "rb") as f:
-        place_fields = pickle.load(f)
+        place_fields = pickle.load(f, encoding="latin1")
 
-    PF_idx = np.asarray(place_fields.keys())
-    PF_starts = np.asarray(place_fields.values())
+    # create a mapping between gids in the ordered env. and the non-ordered one
+    PF_idx = np.asarray(list(place_fields.keys()))
+    PF_starts = np.asarray(list(place_fields.values()))
     sort_idx = np.argsort(PF_starts, kind="mergesort")
     sorted_PF_idx = PF_idx[sort_idx]
+    # key: ordered, val: non-ordered
+    id_map_PF = {neuron_id: PF_idx[i] for i, neuron_id in enumerate(sorted_PF_idx)}
+    assert np.sum(list(id_map_PF.keys())) == np.sum(list(id_map_PF.values()))
 
-    id_map = {}
-    for i, neuron_id in enumerate(sorted_PF_idx):
-        id_map[neuron_id] = PF_idx[i]
-    assert np.sum(id_map.keys()) == np.sum(id_map.values())
+    # create a random mapping for gids which don't have place fields in the non-ordered env.
+    # in order to get rid of "ghost" replays - replays in the other env. in the raster plot
+    # TODO investigate why this is needed!
+    non_PFs = np.array([neuron_id for neuron_id in range(nPCs) if neuron_id not in id_map_PF])
+    tmp = deepcopy(non_PFs)
+    np.random.shuffle(tmp)
+    id_map_nonPF = {neuron_id: tmp[i] for i, neuron_id in enumerate(non_PFs)}
+    assert np.sum(list(id_map_nonPF.keys())) == np.sum(list(id_map_nonPF.values()))
 
-    reordered_spiking_neurons = []
-    for neuron_id in spiking_neurons:
-        if neuron_id in id_map:
-            reordered_spiking_neurons.append(id_map[neuron_id])
+    reordered_spiking_neurons = np.zeros_like(spiking_neurons)
+    for neuron_id in np.unique(spiking_neurons):
+        if neuron_id in id_map_PF:  # place cells
+            reordered_spiking_neurons[spiking_neurons == neuron_id] = id_map_PF[neuron_id]
         else:
-            reordered_spiking_neurons.append(neuron_id)
-
-    return np.asarray(reordered_spiking_neurons)
+            reordered_spiking_neurons[spiking_neurons == neuron_id] = id_map_nonPF[neuron_id]
+    return reordered_spiking_neurons
 
 
 # ========== saving & loading ==========
@@ -303,7 +312,7 @@ def load_wmx(pklf_name):
     """
 
     with open(pklf_name, "rb") as f:
-        wmx_PC_E = pickle.load(f)
+        wmx_PC_E = pickle.load(f, encoding="latin1")
 
     return wmx_PC_E
 
@@ -316,7 +325,7 @@ def load_spikes(pklf_name):
     """
 
     with open(pklf_name, "rb") as f:
-        tmp = pickle.load(f)
+        tmp = pickle.load(f, encoding="latin1")
     return tmp["spike_times"], tmp["spiking_neurons"], tmp["rate"]
 
 
@@ -328,7 +337,7 @@ def load_LFP(pklf_name):
     """
 
     with open(pklf_name, "rb") as f:
-        tmp = pickle.load(f)
+        tmp = pickle.load(f, encoding="latin1")
     return tmp["t"], tmp["LFP"]
 
 
@@ -360,7 +369,7 @@ def _load_PF_starts(pklf_name):
     """
 
     with open(pklf_name, "rb") as f:
-        place_fields = pickle.load(f)
+        place_fields = pickle.load(f, encoding="latin1")
 
     return place_fields
 
@@ -470,7 +479,7 @@ def calc_spiketrain_ISIs():
     # just to get place cell idx
     pklf_name = os.path.join(base_path, "files", "PFstarts_0.5_linear.pkl")
     with open(pklf_name, "rb") as f:
-        PFs = pickle.load(f)
+        PFs = pickle.load(f, encoding="latin1")
 
     npzf_name = os.path.join(base_path, "files", "spike_trains_0.5_linear.npz")
     npz_f = np.load(npzf_name)
@@ -496,7 +505,7 @@ def calc_single_cell_rates(seed):
     # just to get place cell idx
     pklf_name = os.path.join(base_path, "files", "PFstarts_0.5_linear.pkl")
     with open(pklf_name, "rb") as f:
-        PFs = pickle.load(f)
+        PFs = pickle.load(f, encoding="latin1")
 
     pklf_name = os.path.join(base_path, "files", "sim_vars_PC_%s.pkl"%seed)
     spike_times, spiking_neurons, _ = load_spikes(pklf_name)
@@ -532,7 +541,7 @@ def calc_ISIs(seed):
     # just to get place cell idx
     pklf_name = os.path.join(base_path, "files", "PFstarts_0.5_linear.pkl")
     with open(pklf_name, "rb") as f:
-        PFs = pickle.load(f)
+        PFs = pickle.load(f, encoding="latin1")
 
     pklf_name = os.path.join(base_path, "files", "sim_vars_PC_%s.pkl"%seed)
     spike_times, spiking_neurons, _ = load_spikes(pklf_name)
