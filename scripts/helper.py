@@ -179,7 +179,8 @@ def save_place_fields(place_fields, pklf_name):
 
 def save_vars(SM, RM, StateM, subset, seed, f_name="sim_vars_PC"):
     """
-    Saves PC pop spikes, firing rate and PSCs from a couple of recorded neurons after the simulation
+    Saves PC pop spikes, firing rate, membrane voltage, adaptation current and PSCs
+    from a couple of recorded neurons after the simulation
     :param SM, RM: Brian2 SpikeMonitor, PopulationRateMonitor and StateMonitor
     :param subset: IDs of the recorded neurons
     :param seed: random seed used to run the simulation - here used only for naming
@@ -187,18 +188,26 @@ def save_vars(SM, RM, StateM, subset, seed, f_name="sim_vars_PC"):
     """
 
     spike_times, spiking_neurons, rate = preprocess_monitors(SM, RM, calc_ISI=False)
-    PSCs = {}
+    # get PSCs from recorded voltage and conductances (and adaptation current)
+    vs, PSCs, ws = {}, {}, {}
     for i in subset:
         v = StateM[i].vm
-        g_exc = StateM[i].g_ampa*nS# + StateM[i].g_ampaMF*nS
+        vs[i] = v/mV
+        g_exc = StateM[i].g_ampa*nS
         i_exc = -g_exc * (v - (Erev_E * np.ones_like(v/mV)))  # pA
+        # separate outer (mossy fiber) input, from AMPA cond from local cells
+        g_MF = StateM[i].g_ampaMF*nS
+        i_MF = -g_MF * (v - (Erev_E * np.ones_like(v / mV)))  # pA
         g_inh = StateM[i].g_gaba*nS
         i_inh = -g_inh * (v - (Erev_I * np.ones_like(v/mV)))  # pA
-        PSCs[i] = {"i_exc": i_exc/pA, "i_inh":i_inh/pA}
+        PSCs[i] = {"i_exc": i_exc/pA, "i_MF": i_MF/pA, "i_inh": i_inh/pA}
+        ws[i] = StateM[i].w/pA
+    # (shouldn't really be saved to PSCs only but keeping it for consistency)
     PSCs["t"] = StateM.t_ * 1000.  # *1000 ms conversion
 
-    results = {"spike_times":spike_times, "spiking_neurons":spiking_neurons, "rate":rate, "PSCs":PSCs}
-    pklf_name = os.path.join(base_path, "files", "%s_%s.pkl"%(f_name, seed))
+    results = {"spike_times": spike_times, "spiking_neurons": spiking_neurons, "rate": rate,
+               "vs": vs, "PSCs": PSCs, "ws": ws}
+    pklf_name = os.path.join(base_path, "files", "%s_%s.pkl" % (f_name, seed))
     with open(pklf_name, "wb") as f:
         pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -507,30 +516,28 @@ def calc_single_cell_rates(seed):
     with open(pklf_name, "rb") as f:
         PFs = pickle.load(f, encoding="latin1")
 
-    pklf_name = os.path.join(base_path, "files", "sim_vars_PC_%s.pkl"%seed)
-    spike_times, spiking_neurons, _ = load_spikes(pklf_name)
+    pklf_name = os.path.join(base_path, "files", "sim_vars_PC_%s.pkl" % seed)
+    spike_times, spiking_neurons, rate = load_spikes(pklf_name)
 
     place_cell_rates = []
     nplace_cell_rates = []
     for i in range(nPCs):
-        idx = np.where(spiking_neurons == i)[0]
-        spikes = spike_times[idx]
+        spikes = spike_times[spiking_neurons == i]
         if i in PFs:
             place_cell_rates.append(len(spikes)/(len_sim/1000.))
         else:
             nplace_cell_rates.append(len(spikes)/(len_sim/1000.))
 
-    pklf_name = os.path.join(base_path, "files", "sim_vars_BC_%s.pkl"%seed)
+    pklf_name = os.path.join(base_path, "files", "sim_vars_BC_%s.pkl" % seed)
     spike_times, spiking_neurons, _ = load_spikes(pklf_name)
 
     BC_rates = []
     for i in range(nBCs):
-        idx = np.where(spiking_neurons == i)[0]
-        spikes = spike_times[idx]
+        spikes = spike_times[spiking_neurons == i]
         BC_rates.append(len(spikes)/(len_sim/1000.))
 
-    results = {"PCs":np.asarray(place_cell_rates), "nPCs":np.asarray(nplace_cell_rates), "BCs":np.asarray(BC_rates)}
-    pklf_name = os.path.join(base_path, "files", "single_cell_rates_%s.pkl"%seed)
+    results = {"PCs": np.asarray(place_cell_rates), "nPCs": np.asarray(nplace_cell_rates), "BCs": np.asarray(BC_rates)}
+    pklf_name = os.path.join(base_path, "files", "single_cell_rates_%s.pkl" % seed)
     with open(pklf_name, "wb") as f:
         pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -581,8 +588,8 @@ def calc_LFP_TFR(seed):
     scales = np.concatenate((np.linspace(25, 80, 250), np.linspace(80, 300, 250)[1:]))  # 27-325 Hz  pywt.scale2frequency("morl", scale) / (1/fs)
     coefs, freqs = pywt.cwt(LFP, scales, "morl", 1/fs)
 
-    results = {"coefs":coefs, "freqs":freqs}
-    pklf_name = os.path.join(base_path, "files", "LFP_TFR_%s.pkl"%seed)
+    results = {"coefs": coefs, "freqs": freqs}
+    pklf_name = os.path.join(base_path, "files", "LFP_TFR_%s.pkl" % seed)
     with open(pklf_name, "wb") as f:
         pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
 
