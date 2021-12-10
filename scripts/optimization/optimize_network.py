@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 """
 Optimizes connection parameters (synaptic weights)
-authors: Bence Bagi, András Ecker last update: 10.2018
+authors: Bence Bagi, András Ecker last update: 12.2021
 """
 
 import os, sys, logging
@@ -26,7 +26,7 @@ logger.setLevel(logging.INFO)
 
 def load_checkpoints(pklf_name):
     """
-    Loads in saved checkpoints from pickle file (used e.g. to repeat analysis...)
+    Loads in saved checkpoints from pickle file (used e.g. to repeat the analysis part...)
     :param pklf_name: name of the saved pickle file
     :return: obejects saved by BluePyOpt"""
     import pickle
@@ -97,12 +97,12 @@ if __name__ == "__main__":
 
     # parameters to be fitted as a list of: (name, lower bound, upper bound)
     # the order matters! if you want to add more parameters - update `run_sim.py` too
-    optconf = [("w_PC_I_", 0.15, 0.4),
-               ("w_BC_E_", 3.25, 4.25),
-               ("w_BC_I_", 6.5, 8.0),
-               ("wmx_mult_", 1.0, 3.0),
-               ("w_PC_MF_", 24.0, 26.0),
-               ("rate_MF_", 15.0, 17.0)]
+    optconf = [("w_PC_I_", 0.1, 2.0),
+               ("w_BC_E_", 0.1, 2.0),
+               ("w_BC_I_", 1.0, 8.0),
+               ("wmx_mult_", 0.5, 2.0),
+               ("w_PC_MF_", 15.0, 25.0),
+               ("rate_MF_", 5.0, 20.0)]
     pnames = [name for name, _, _ in optconf]
 
     offspring_size = 35
