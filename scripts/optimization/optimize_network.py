@@ -105,8 +105,8 @@ if __name__ == "__main__":
                ("rate_MF_", 15.0, 17.0)]
     pnames = [name for name, _, _ in optconf]
 
-    offspring_size = 3
-    max_ngen = 2
+    offspring_size = 35
+    max_ngen = 10
 
     pklf_name = os.path.join(base_path, "files", f_in)
     wmx_PC_E = load_wmx(pklf_name) * 1e9  # *1e9 nS conversion
@@ -115,17 +115,13 @@ if __name__ == "__main__":
     pool = mp.Pool(processes=mp.cpu_count()-1)
     # Create BluePyOpt optimization and run
     evaluator = sim_evaluator.Brian2Evaluator(linear, wmx_PC_E, optconf)
-    '''
     opt = bpop.optimisations.DEAPOptimisation(evaluator, offspring_size=offspring_size, map_function=pool.map,
                                               eta=20, mutpb=0.3, cxpb=0.7)
 
     print("Started running %i simulations on %i cores..." % (offspring_size*max_ngen, mp.cpu_count()-1))
     pop, hof, log, hist = opt.run(max_ngen=max_ngen, cp_filename=cp_f_name)
     del pool, opt
-    '''
     # ====================================== end of optimization ======================================
-
-    pop, hof, log, hist = load_checkpoints(cp_f_name)
 
     # summary figure (about optimization)
     plot_evolution(log.select("gen"), np.array(log.select("min")), np.array(log.select("avg")),
