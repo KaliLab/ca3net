@@ -93,7 +93,7 @@ if __name__ == "__main__":
     place_cell_ratio = 0.5
     f_in = "wmx_%s_%.1f_linear.pkl" % (STDP_mode, place_cell_ratio) if linear else "wmx_%s_%.1f.pkl" % (STDP_mode, place_cell_ratio)
     cp_f_name = os.path.join(base_path, "scripts", "optimization", "checkpoints", "checkpoint_%s" % f_in[4:])
-    hof_f_name = os.path.join(base_path, "scripts", "optimization", "checkpoints", "hof_%s" % f_in[4:])
+    hof_f_name = os.path.join(base_path, "scripts", "optimization", "checkpoints", "hof_%s.csv" % f_in[4:-4])
 
     # parameters to be fitted as a list of: (name, lower bound, upper bound)
     # the order matters! if you want to add more parameters - update `run_sim.py` too
