@@ -89,7 +89,7 @@ if __name__ == "__main__":
     except:
         STDP_mode = "sym"
     assert STDP_mode in ["sym", "asym"]
-    linear = False
+    linear = True
     place_cell_ratio = 0.5
     f_in = "wmx_%s_%.1f_linear.pkl" % (STDP_mode, place_cell_ratio) if linear else "wmx_%s_%.1f.pkl" % (STDP_mode, place_cell_ratio)
     cp_f_name = os.path.join(base_path, "scripts", "optimization", "checkpoints", "checkpoint_%s" % f_in[4:])
