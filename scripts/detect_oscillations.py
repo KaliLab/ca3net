@@ -132,7 +132,7 @@ def ripple(f, Pxx, slice_idx=[], p_th=0.05):
 
     f = np.asarray(f)
     if slice_idx:
-        p_vals = []; freqs = []; ripple_powers = []
+        p_vals, freqs, ripple_powers = [], [], []
         for i in range(Pxx.shape[0]):
             Pxx_ripple = Pxx[i, :][np.where((150 < f) & (f < 220))]
             p_vals.append(_fisher(Pxx_ripple))
@@ -164,7 +164,7 @@ def gamma(f, Pxx, slice_idx=[], p_th=0.05):
 
     f = np.asarray(f)
     if slice_idx:
-        p_vals = []; freqs = []; gamma_powers = []
+        p_vals, freqs, gamma_powers = [], [], []
         for i in range(Pxx.shape[0]):
             Pxx_gamma = Pxx[i, :][np.where((30 < f) & (f < 100))]
             p_vals.append(_fisher(Pxx_gamma))
@@ -183,6 +183,39 @@ def gamma(f, Pxx, slice_idx=[], p_th=0.05):
         avg_gamma_freq = f[np.where(30 < f)[0][0] + Pxx_gamma.argmax()] if p_val < p_th else np.nan
         gamma_power = (sum(Pxx_gamma) / sum(Pxx)) * 100
         return avg_gamma_freq, gamma_power
+
+
+def lowfreq(f, Pxx, slice_idx=[], p_th=0.05):
+    """
+    Decides if there is a significant sub gamma (alpha, beta) freq. oscillation by applying Fisher g-test on the power spectrum
+    (This function is only used during optimizations to supress low freq. oscillations and ensure that the oscillation
+    we get is not a harmonic of those)
+    :param f, Pxx: calculated power spectrum of the neural activity and frequencies used to calculate it (see `analyse_rate()`)
+    :param slice_idx: time idx used to slice out high activity states (see `slice_high_activity()`)
+    :param p_th: significance threshold for Fisher g-test
+    :return: avg_subgamma_freq, subgamma_power: average frequency and power of the oscillations
+    """
+
+    f = np.asarray(f)
+    if slice_idx:
+        p_vals, freqs, subgamma_powers = [], [], []
+        for i in range(Pxx.shape[0]):
+            Pxx_subgamma = Pxx[i, :][np.where(f < 30)]
+            p_vals.append(_fisher(Pxx_subgamma))
+            freqs.append(Pxx_subgamma.argmax())
+            subgamma_powers.append((sum(Pxx_subgamma) / sum(Pxx[i, :])) * 100)
+        idx = np.where(np.asarray(p_vals) <= p_th)[0].tolist()
+        if len(idx) >= 0.25*len(slice_idx):  # if at least 25% are significant
+            avg_subgamma_freq = int(np.mean(np.asarray(freqs)[idx]))
+        else:
+            avg_subgamma_freq = np.nan
+        return avg_subgamma_freq, np.mean(subgamma_powers)
+    else:
+        Pxx_subgamma = Pxx[f < 30]
+        p_val = _fisher(Pxx_subgamma)
+        avg_subgamma_freq = np.max(Pxx_subgamma) if p_val < p_th else np.nan
+        subgamma_power = (sum(Pxx_subgamma) / sum(Pxx)) * 100
+        return avg_subgamma_freq, subgamma_power
 
 
 def lowpass_filter(time_series, fs=10000., cut=500.):
