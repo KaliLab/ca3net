@@ -69,20 +69,21 @@ if __name__ == "__main__":
                ("rate_MF_", 5.0, 20.0)]
     pnames = [name for name, _, _ in optconf]
 
-    offspring_size = 3
-    max_ngen = 1
+    offspring_size = 50
+    max_ngen = 10
 
     pklf_name = os.path.join(base_path, "files", f_in)
     wmx_PC_E = load_wmx(pklf_name) * 1e9  # *1e9 nS conversion
 
     # Create multiprocessing pool for parallel evaluation of fitness function
-    pool = mp.Pool(processes=mp.cpu_count()-1)
+    n_proc = np.max([offspring_size, mp.cpu_count()-1])
+    pool = mp.Pool(processes=n_proc)
     # Create BluePyOpt optimization and run
     evaluator = sim_evaluator.Brian2Evaluator(linear, wmx_PC_E, optconf)
     opt = bpop.optimisations.DEAPOptimisation(evaluator, offspring_size=offspring_size, map_function=pool.map,
                                               eta=20, mutpb=0.3, cxpb=0.7)
 
-    print("Started running %i simulations on %i cores..." % (offspring_size*max_ngen, mp.cpu_count()-1))
+    print("Started running %i simulations on %i cores..." % (offspring_size*max_ngen, n_proc))
     pop, hof, log, hist = opt.run(max_ngen=max_ngen, cp_filename=cp_f_name)
     del pool, opt
     # ====================================== end of optimization ======================================
