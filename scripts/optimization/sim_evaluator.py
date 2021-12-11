@@ -75,8 +75,7 @@ class Brian2Evaluator(bpop.evaluators.Evaluator):
                                 slice_idx, "blue", multiplier_=1)
                     plot_PSD(rate_PC, rate_ac_PC, f_PC, Pxx_PC, "PC_population", "blue", multiplier_=1)
                     plot_PSD(rate_BC, rate_ac_BC, f_BC, Pxx_BC, "BC_population", "green", multiplier_=1)
-                    plot_zoomed(spike_times_PC, spiking_neurons_PC, rate_PC, "PC_population", "blue",
-                                multiplier_=1, PC_pop=False)
+                    _ = plot_zoomed(spike_times_PC, spiking_neurons_PC, rate_PC, "PC_population", "blue", multiplier_=1)
                     plot_zoomed(spike_times_BC, spiking_neurons_BC, rate_BC, "BC_population", "green",
                                 multiplier_=1, PC_pop=False)
 
