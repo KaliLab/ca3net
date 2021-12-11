@@ -21,6 +21,7 @@ class Brian2Evaluator(bpop.evaluators.Evaluator):
 
     def __init__(self, linear, Wee, params):
         """
+        :param linear: flag to indicate if linear or circular environment is used (as oscillation detection sligthly differs)
         :param Wee: weight matrix (passing Wee with cPickle to the slaves (as BluPyOpt does) is still the fastest solution)
         :param params: list of parameters to fit - every entry must be a tuple: (name, lower bound, upper bound)
         """
