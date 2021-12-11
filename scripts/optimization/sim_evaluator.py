@@ -39,9 +39,9 @@ class Brian2Evaluator(bpop.evaluators.Evaluator):
         SM_PC, SM_BC, RM_PC, RM_BC = sim.run_simulation(self.Wee, *individual, verbose=verbose)
         return SM_PC, SM_BC, RM_PC, RM_BC
 
-    def evaluate_with_lists(self, individual):
+    def evaluate_with_lists(self, individual, verbose=False, plots=False):
         """Fitness error used by BluePyOpt for the optimization"""
-        SM_PC, SM_BC, RM_PC, RM_BC = self.generate_model(individual)
+        SM_PC, SM_BC, RM_PC, RM_BC = self.generate_model(individual, verbose=verbose)
 
         try:
             wc_errors = [0., 0., 0., 0., 0., 0.]  # worst case scenario
@@ -59,6 +59,25 @@ class Brian2Evaluator(bpop.evaluators.Evaluator):
                 avg_ripple_freq_BC, ripple_power_BC = ripple(f_BC, Pxx_BC, slice_idx)
                 avg_gamma_freq_PC, gamma_power_PC = gamma(f_PC, Pxx_PC, slice_idx)
                 avg_gamma_freq_BC, gamma_power_BC = gamma(f_BC, Pxx_BC, slice_idx)
+
+                # these 2 flags are only used for the last rerun, but not during the optimization
+                if verbose:
+                    print("Mean excitatory rate: %.3f" % mean_rate_PC)
+                    print("Mean inhibitory rate: %.3f" % mean_rate_BC)
+                    print("Average exc. ripple freq: %.3f" % avg_ripple_freq_PC)
+                    print("Exc. ripple power: %.3f" % ripple_power_PC)
+                    print("Average inh. ripple freq: %.3f" % avg_ripple_freq_BC)
+                    print("Inh. ripple power: %.3f" % ripple_power_BC)
+                if plots:
+                    from plots import plot_raster, plot_PSD, plot_zoomed
+                    plot_raster(spike_times_PC, spiking_neurons_PC, rate_PC, [ISI_hist_PC, bin_edges_PC],
+                                slice_idx, "blue", multiplier_=1)
+                    plot_PSD(rate_PC, rate_ac_PC, f_PC, Pxx_PC, "PC_population", "blue", multiplier_=1)
+                    plot_PSD(rate_BC, rate_ac_BC, f_BC, Pxx_BC, "BC_population", "green", multiplier_=1)
+                    plot_zoomed(spike_times_PC, spiking_neurons_PC, rate_PC, "PC_population", "blue",
+                                multiplier_=1, PC_pop=False)
+                    plot_zoomed(spike_times_BC, spiking_neurons_BC, rate_BC, "BC_population", "green",
+                                multiplier_=1, PC_pop=False)
 
                 # look for significant ripple peak close to 180 Hz
                 ripple_peakE = np.exp(-1/2*(avg_ripple_freq_PC-180.)**2/20**2) if not np.isnan(avg_ripple_freq_PC) else 0.

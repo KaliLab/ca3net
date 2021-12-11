@@ -13,10 +13,8 @@ import sim_evaluator
 base_path = os.path.sep.join(os.path.abspath("__file__").split(os.path.sep)[:-3])
 # add "scripts" directory to the path (to import modules)
 sys.path.insert(0, os.path.sep.join([base_path, "scripts"]))
-from helper import load_wmx, preprocess_monitors
-from detect_oscillations import analyse_rate, ripple
-from detect_replay import slice_high_activity
-from plots import plot_evolution, plot_raster, plot_PSD, plot_zoomed
+from helper import load_wmx
+from plots import plot_evolution
 
 # print info into console
 logging.basicConfig(stream=sys.stdout)
@@ -49,40 +47,6 @@ def hof2csv(pnames, hof, f_name):
     df.to_csv(f_name)
 
 
-def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, linear):
-    """
-    Duplicated (simpler) version of `../spw_network.py/analyse_results()`
-    :param SM_PC, SM_BC, RM_PC, RM_BC: Brian2 spike and rate monitors of PC and BC populations
-    """
-
-    if SM_PC.num_spikes > 0 and SM_BC.num_spikes > 0:  # check if there is any activity
-        spike_times_PC, spiking_neurons_PC, rate_PC, ISI_hist_PC, bin_edges_PC = preprocess_monitors(SM_PC, RM_PC)
-        spike_times_BC, spiking_neurons_BC, rate_BC = preprocess_monitors(SM_BC, RM_BC, calc_ISI=False)
-
-        slice_idx = [] if not linear else slice_high_activity(rate_PC, th=2, min_len=260)
-        mean_rate_PC, rate_ac_PC, max_ac_PC, t_max_ac_PC, f_PC, Pxx_PC = analyse_rate(rate_PC, 1000., slice_idx)
-        mean_rate_BC, rate_ac_BC, max_ac_BC, t_max_ac_BC, f_BC, Pxx_BC = analyse_rate(rate_BC, 1000., slice_idx)
-
-        avg_ripple_freq_PC, ripple_power_PC = ripple(f_PC, Pxx_PC, slice_idx)
-        avg_ripple_freq_BC, ripple_power_BC = ripple(f_BC, Pxx_BC, slice_idx)
-
-        print("Mean excitatory rate: %.3f" % mean_rate_PC)
-        print("Mean inhibitory rate: %.3f" % mean_rate_BC)
-        print("Average exc. ripple freq: %.3f" % avg_ripple_freq_PC)
-        print("Exc. ripple power: %.3f" % ripple_power_PC)
-        print("Average inh. ripple freq: %.3f" % avg_ripple_freq_BC)
-        print("Inh. ripple power: %.3f" % ripple_power_BC)
-
-        plot_raster(spike_times_PC, spiking_neurons_PC, rate_PC, [ISI_hist_PC, bin_edges_PC], slice_idx, "blue", multiplier_=1)
-        plot_PSD(rate_PC, rate_ac_PC, f_PC, Pxx_PC, "PC_population", "blue", multiplier_=1)
-        plot_PSD(rate_BC, rate_ac_BC, f_BC, Pxx_BC, "BC_population", "green", multiplier_=1)
-        plot_zoomed(spike_times_PC, spiking_neurons_PC, rate_PC, "PC_population", "blue", multiplier_=1, PC_pop=False)
-        plot_zoomed(spike_times_BC, spiking_neurons_BC, rate_BC, "BC_population", "green", multiplier_=1, PC_pop=False)
-
-    else:
-        print("No activity!")
-
-
 if __name__ == "__main__":
     try:
         STDP_mode = sys.argv[1]
@@ -105,8 +69,8 @@ if __name__ == "__main__":
                ("rate_MF_", 5.0, 20.0)]
     pnames = [name for name, _, _ in optconf]
 
-    offspring_size = 35
-    max_ngen = 10
+    offspring_size = 3
+    max_ngen = 1
 
     pklf_name = os.path.join(base_path, "files", f_in)
     wmx_PC_E = load_wmx(pklf_name) * 1e9  # *1e9 nS conversion
@@ -132,5 +96,4 @@ if __name__ == "__main__":
     best = hof[0]
     for pname, value in zip(pnames, best):
         print("%s = %.3f" % (pname, value))
-    SM_PC, SM_BC, RM_PC, RM_BC = evaluator.generate_model(best, verbose=True)
-    analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, linear)
+    _ = evaluator.evaluate_with_lists(best, verbose=True, plots=True)
