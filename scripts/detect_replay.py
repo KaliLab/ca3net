@@ -50,9 +50,9 @@ def replay_linear(spike_times, spiking_neurons, slice_idx, pklf_name, N, delta_t
         spatial_points = np.linspace(0, 2*np.pi, n_spatial_points)
         tuning_curves = load_tuning_curves(pklf_name, spatial_points)
 
-        sign_replays = []; results = {}
+        sign_replays, results = [], {}
         for bounds in tqdm(slice_idx, desc="Detecting replay"):  # iterate through sustained high activity periods
-            lb = bounds[0]; ub = bounds[1]
+            lb, ub = bounds[0], bounds[1]
             idx = np.where((lb <= spike_times) & (spike_times < ub))
             bin_spike_counts = extract_binspikecount(lb, ub, delta_t, t_incr, spike_times[idx], spiking_neurons[idx],
                                                      tuning_curves)
@@ -61,8 +61,8 @@ def replay_linear(spike_times, spiking_neurons, slice_idx, pklf_name, N, delta_t
             R, fitted_path, _ = fit_trajectory(X_posterior)
             sign, shuffled_Rs = test_significance(bin_spike_counts, tuning_curves, delta_t, R, N)
             sign_replays.append(sign)
-            results[bounds] = {"X_posterior":X_posterior, "fitted_path":fitted_path,
-                               "R":R, "shuffled_Rs":shuffled_Rs, "significance":sign}
+            results[bounds] = {"X_posterior": X_posterior, "fitted_path": fitted_path,
+                               "R": R, "shuffled_Rs": shuffled_Rs, "significance": sign}
         significance = 1 if not np.isnan(sign_replays).all() else np.nan
         return significance, results
     else:
@@ -81,15 +81,4 @@ def replay_circular(ISI_hist, th=0.7):
     max_ID = np.argmax(ISI_hist)
     bins_3 = ISI_hist[max_ID-1:max_ID+2] if 1 <= max_ID <= len(ISI_hist)-2 else []
     replay = 1 if sum(int(i) for i in ISI_hist) * th < sum(int(i) for i in bins_3) else np.nan
-    # this part is only used for (circular track) optimization...
-    bin_means = np.arange(175, 826, 50)  # assumes that ISIs are binned into 20 intervals in `preprocess_monitors()`...
-    if 1 <= max_ID <= len(ISI_hist)-2:
-        tmp = ISI_hist[max_ID-1]*bin_means[max_ID-1] + ISI_hist[max_ID]*bin_means[max_ID]\
-              + ISI_hist[max_ID+1]*bin_means[max_ID+1]
-        avg_replay_interval = tmp / (ISI_hist[max_ID-1] + ISI_hist[max_ID] + ISI_hist[max_ID+1])
-    elif max_ID == 0:
-        avg_replay_interval = 175
-    elif max_ID == len(ISI_hist)-1:
-        avg_replay_interval = 825
-
-    return replay, avg_replay_interval
+    return replay
