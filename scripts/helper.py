@@ -5,6 +5,7 @@ author: András Ecker, last update: 06.2019
 """
 
 import os
+from shutil import rmtree
 import pickle
 from copy import deepcopy
 import numpy as np
@@ -164,6 +165,18 @@ def reorder_spiking_neurons(spiking_neurons, pklf_name_tuning_curves):
 
 
 # ========== saving & loading ==========
+
+
+def create_dir(dir_name):
+    """
+    Deletes dir (if exists) and creates a new one with
+    :param dir_name: string: full path of the directory to be created
+    """
+    if os.path.isdir(dir_name):
+        rmtree(dir_name)
+        os.mkdir(dir_name)
+    else:
+        os.mkdir(dir_name)
 
 
 def save_place_fields(place_fields, pklf_name):
