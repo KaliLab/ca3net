@@ -341,8 +341,8 @@ if __name__ == "__main__":
     place_cell_ratio = 0.5
     seed = 12345
 
-    analyse_replay = False
-    TFR = False
+    analyse_replay = True
+    TFR = True
     save = False
     verbose = True
 
