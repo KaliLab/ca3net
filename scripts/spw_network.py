@@ -275,7 +275,7 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC,
             coefs_PC, freqs_PC = calc_TFR(rate_PC, 1000., slice_idx)
             coefs_BC, freqs_BC = calc_TFR(rate_BC, 1000., slice_idx)
             coefs_LFP, freqs_LFP = calc_TFR(LFP[::10].copy(), 1000., slice_idx)
-            if not linear:
+            if not linear or not slice_idx:
                 plot_TFR(coefs_PC, freqs_PC, "PC_population",
                          os.path.join(base_path, "figures", "%.2f_PC_population_wt.png" % multiplier))
                 plot_TFR(coefs_BC, freqs_BC, "BC_population",
@@ -283,14 +283,14 @@ def analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC,
                 plot_TFR(coefs_LFP, freqs_LFP, "LFP",
                          os.path.join(base_path, "figures", "%.2f_LFP_wt.png" % multiplier))
             else:
-                if slice_idx:
-                    for i, bounds in enumerate(slice_idx):
-                        fig_name = os.path.join(dir_name, "%i-%i_PC_population_wt.png" % (bounds[0], bounds[1]))
-                        plot_TFR(coefs_PC[i], freqs_PC, "PC_population", fig_name)
-                        fig_name = os.path.join(dir_name, "%i-%i_BC_population_wt.png" % (bounds[0], bounds[1]))
-                        plot_TFR(coefs_BC[i], freqs_PC, "BC_population", fig_name)
-                        fig_name = os.path.join(dir_name, "%i-%i_LFP_wt.png" % (bounds[0], bounds[1]))
-                        plot_TFR(coefs_LFP[i], freqs_LFP, "LFP", fig_name)
+                for i, bounds in enumerate(slice_idx):
+                    fig_name = os.path.join(dir_name, "%i-%i_PC_population_wt.png" % (bounds[0], bounds[1]))
+                    plot_TFR(coefs_PC[i], freqs_PC, "PC_population", fig_name)
+                    fig_name = os.path.join(dir_name, "%i-%i_BC_population_wt.png" % (bounds[0], bounds[1]))
+                    plot_TFR(coefs_BC[i], freqs_PC, "BC_population", fig_name)
+                    fig_name = os.path.join(dir_name, "%i-%i_LFP_wt.png" % (bounds[0], bounds[1]))
+                    plot_TFR(coefs_LFP[i], freqs_LFP, "LFP", fig_name)
+
             if save:
                 save_TFR(freqs_PC, coefs_PC, freqs_BC, coefs_BC, freqs_LFP, coefs_LFP, seed)
 
