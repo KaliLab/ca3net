@@ -74,8 +74,7 @@ def plot_raster(spike_times, spiking_neurons, rate, hist, slice_idx, color_, mul
     plt.yscale("log")
 
     fig.tight_layout()
-
-    fig_name = os.path.join(fig_dir, "%.2f*.png"%multiplier_)
+    fig_name = os.path.join(fig_dir, "%.2f.png" % multiplier_)
     fig.savefig(fig_name)
 
 
@@ -97,7 +96,7 @@ def plot_posterior_trajectory(X_posterior, fitted_path, R, fig_name, temporal_re
     ax.autoscale(False)
     ax.plot(fitted_path-3, color="white", lw=2)
     ax.plot(fitted_path+3, color="white", lw=2)
-    ax.set_title("Posterior matrix and fitted path (R = %.2f)"%R)
+    ax.set_title("Posterior matrix and fitted path (R = %.2f)" % R)
     ax.set_xticklabels(ax.get_xticks().astype(int)*temporal_res)
     ax.set_xlabel("Time (ms)")
     ax.set_ylabel("Sampled position")
@@ -138,9 +137,10 @@ def plot_PSD(rate, rate_ac, f, Pxx, title_, color_, multiplier_):
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(3, 1, 1)
 
-    ax.bar(np.linspace(0, len_sim, len(avg_rate)), avg_rate, width=bin_, align="edge", color=color_, edgecolor="black", linewidth=0.5, alpha=0.9)
+    ax.bar(np.linspace(0, len_sim, len(avg_rate)), avg_rate, width=bin_, align="edge", color=color_,
+           edgecolor="black", linewidth=0.5, alpha=0.9)
     ax.set_xlim([0, len_sim])
-    ax.set_title("%s rate"%title_)
+    ax.set_title("%s rate" % title_)
     ax.set_xlabel("Time (ms)")
     ax.set_ylabel("Rate (Hz)")
 
@@ -173,14 +173,15 @@ def plot_PSD(rate, rate_ac, f, Pxx, title_, color_, multiplier_):
 
     sns.despine()
     fig.tight_layout()
-    fig_name = os.path.join(fig_dir, "%.2f_%s.png"%(multiplier_, title_))
+    fig_name = os.path.join(fig_dir, "%.2f_%s.png" % (multiplier_, title_))
     fig.savefig(fig_name)
 
 
 def plot_TFR(coefs, freqs, title_, fig_name):
     """
     Saves figure with time frequency representation
-    :param coefs, freqs: coefficients from wavelet transform and frequencies used (see `pywt.cwt()` in `detect_oscillations/analyse_rate()`)
+    :param coefs, freqs: coefficients from wavelet transform and frequencies used (see `pywt.cwt()`
+                         in `detect_oscillations/analyse_rate()`)
     :param title_, fig_name: outline and naming parameters
     """
 
@@ -190,10 +191,10 @@ def plot_TFR(coefs, freqs, title_, fig_name):
     i = ax.imshow(np.abs(coefs), cmap=plt.get_cmap("jet"), aspect="auto", interpolation=None,
                   vmax=np.max(np.abs(coefs)), vmin=np.max(-np.abs(coefs)))
     fig.colorbar(i)
-    ax.set_title("Wavlet transform of %s"%title_)
+    ax.set_title("Wavlet transform of %s" % title_)
     ax.set_xlabel("Time (ms)")
     ax.set_ylabel("Frequency (Hz)")
-    ax.set_yticks(np.arange(0, 300, 20)); ax.set_yticklabels(["%.1f"%i for i in freqs[::20].copy()])
+    ax.set_yticks(np.arange(0, 300, 20)); ax.set_yticklabels(["%.1f" % i for i in freqs[::20].copy()])
 
     fig.savefig(fig_name)
     plt.close(fig)
@@ -201,7 +202,8 @@ def plot_TFR(coefs, freqs, title_, fig_name):
 
 def _select_subset(selection, ymin, ymax):
     """
-    Helper function to select a subset of neurons for plotting more detailes (the subset is from the ones spiking in the last 100ms - see `plot_zoomed()`)
+    Helper function to select a subset of neurons for plotting more detailes
+    (the subset is from the ones spiking in the last 100ms - see `plot_zoomed()`)
     param selection: np.array of recorded neurons
     param ymin, ymax: lower and upper bound for the selection
     return subset: list of selected subset
@@ -280,7 +282,7 @@ def plot_zoomed(spike_times, spiking_neurons, rate, title_, color_, multiplier_,
                 ax.scatter(spike_times[idx], spiking_neurons[idx], c="red", marker=".", s=size_, label=id_)
             else:
                 ax.scatter(spike_times[idx], spiking_neurons[idx], c="red", marker=".", s=size_)
-    ax.set_title("%s raster (last 100 ms)"%title_)
+    ax.set_title("%s raster (last 100 ms)" % title_)
     ax.set_xlim([zoom_from, len_sim])
     ax.set_ylim([ymin, ymax])
     ax.set_ylabel("Neuron ID")
@@ -289,7 +291,8 @@ def plot_zoomed(spike_times, spiking_neurons, rate, title_, color_, multiplier_,
 
     ax2 = fig.add_subplot(gs[1])
     sns.despine(ax=ax2)
-    ax2.bar(np.linspace(zoom_from, len_sim, len(avg_rate)), avg_rate, width=bin_, align="edge", color=color_, edgecolor="black", linewidth=0.5, alpha=0.9)
+    ax2.bar(np.linspace(zoom_from, len_sim, len(avg_rate)), avg_rate, width=bin_, align="edge",
+            color=color_, edgecolor="black", linewidth=0.5, alpha=0.9)
     ax2.set_xlim([zoom_from, len_sim])
     ax2.set_ylabel("Rate (Hz)")
 
@@ -297,18 +300,20 @@ def plot_zoomed(spike_times, spiking_neurons, rate, title_, color_, multiplier_,
         ax3 = fig.add_subplot(gs[2])
         sns.despine(ax=ax3)
         if len(idx) != 0:
-            ax3.plot(t[np.where((zoom_from <= t) & (t < len_sim))], v[np.where((zoom_from <= t) & (t < len_sim))], linewidth=2, c=color_,)
+            ax3.plot(t[np.where((zoom_from <= t) & (t < len_sim))],
+                     v[np.where((zoom_from <= t) & (t < len_sim))], linewidth=2, c=color_,)
             tmp = spike_th_PC * np.ones_like(idx, dtype=np.float) if PC_pop else spike_th_BC * np.ones_like(idx, dtype=np.float)
             ax3.plot(spike_times[idx], tmp, c="red", marker=".", linewidth=0, label=id_)
         else:
-            ax3.plot(t[np.where((zoom_from <= t) & (t < len_sim))], v[np.where((zoom_from <= t) & (t < len_sim))], linewidth=2, c=color_, label=id_)
+            ax3.plot(t[np.where((zoom_from <= t) & (t < len_sim))],
+                     v[np.where((zoom_from <= t) & (t < len_sim))], linewidth=2, c=color_, label=id_)
         ax3.set_xlim([zoom_from, len_sim])
         ax3.set_xlabel("Time (ms)")
         ax3.set_ylabel("Vm (mV)")
         ax3.legend()
 
     fig.tight_layout()
-    fig_name = os.path.join(fig_dir, "%.2f_%s_zoomed.png"%(multiplier_, title_))
+    fig_name = os.path.join(fig_dir, "%.2f_%s_zoomed.png" % (multiplier_, title_))
     fig.savefig(fig_name)
 
     if PC_pop:
@@ -334,11 +339,11 @@ def plot_detailed(StateM, subset, multiplier_, plot_adaptation=True):
 
     t = StateM.t_ * 1000.  # *1000 ms convertion
     for i in subset:
-        ax.plot(t, StateM[i].vm*1000, linewidth=1.5, label="%i"%i)  # *1000 mV conversion
+        ax.plot(t, StateM[i].vm*1000, linewidth=1.5, label="%i" % i)  # *1000 mV conversion
         if plot_adaptation:
-            ax2.plot(t, StateM[i].w*1e12, linewidth=1.5, label="%i"%i)  # *1e12 pA conversion
-        ax3.plot(t, (StateM[i].g_ampa + StateM[i].g_ampaMF), linewidth=1.5, label="%i"%i)
-        ax4.plot(t, StateM[i].g_gaba, linewidth=1.5, label="%i"%i)
+            ax2.plot(t, StateM[i].w*1e12, linewidth=1.5, label="%i" % i)  # *1e12 pA conversion
+        ax3.plot(t, (StateM[i].g_ampa + StateM[i].g_ampaMF), linewidth=1.5, label="%i" % i)
+        ax4.plot(t, StateM[i].g_gaba, linewidth=1.5, label="%i" % i)
 
     ax.set_title("Membrane potential (last 100 ms)")
     ax.set_ylabel("V (mV)")
@@ -365,7 +370,7 @@ def plot_detailed(StateM, subset, multiplier_, plot_adaptation=True):
 
     sns.despine()
     fig.tight_layout()
-    fig_name = os.path.join(fig_dir, "%.2f_PC_population_zoomed_detailed.png"%multiplier_)
+    fig_name = os.path.join(fig_dir, "%.2f_PC_population_zoomed_detailed.png" % multiplier_)
     fig.savefig(fig_name)
 
 
@@ -415,7 +420,7 @@ def plot_LFP(t, LFP, f, Pxx, multiplier_):
 
     sns.despine()
     fig.tight_layout()
-    fig_name = os.path.join(fig_dir, "%.2f_LFP.png"%multiplier_)
+    fig_name = os.path.join(fig_dir, "%.2f_LFP.png" % multiplier_)
     fig.savefig(fig_name)
 
 
@@ -515,7 +520,7 @@ def plot_STDP_rule(taup, taum, Ap, Am, save_name):
     ax = fig.add_subplot(1, 1, 1)
     sns.despine()
 
-    ax.plot(delta_t, delta_w, "b-", linewidth=2, label="STDP rule taup:%s(ms), Ap:%s"%(taup, Ap))
+    ax.plot(delta_t, delta_w, "b-", linewidth=2, label="STDP rule taup:%s(ms), Ap:%s" % (taup, Ap))
     ax.set_title("STDP curve")
     ax.set_xlabel("$\Delta t$ /post-pre/ (ms)")
     ax.set_ylabel("$\Delta w$ (nS)")
@@ -527,7 +532,7 @@ def plot_STDP_rule(taup, taum, Ap, Am, save_name):
     ax.axhline(0, ls="-", c="k")
     ax.legend()
 
-    fig_name = os.path.join(fig_dir, "%s.png"%save_name)
+    fig_name = os.path.join(fig_dir, "%s.png" % save_name)
     fig.savefig(fig_name)
 
 
@@ -546,7 +551,7 @@ def plot_wmx(wmx, save_name):
     ax.set_xlabel("Target neuron")
     ax.set_ylabel("Source neuron")
 
-    fig_name = os.path.join(fig_dir, "%s.png"%save_name)
+    fig_name = os.path.join(fig_dir, "%s.png" % save_name)
     fig.savefig(fig_name)
 
 
@@ -576,7 +581,7 @@ def plot_wmx_avg(wmx, n_pops, save_name):
     ax.set_xlabel("Target neuron")
     ax.set_ylabel("Source neuron")
 
-    fig_name = os.path.join(fig_dir, "%s.png"%save_name)
+    fig_name = os.path.join(fig_dir, "%s.png" % save_name)
     fig.savefig(fig_name)
 
 
@@ -610,7 +615,7 @@ def plot_w_distr(wmx, save_name):
 
     sns.despine()
     fig.tight_layout()
-    fig_name = os.path.join(fig_dir, "%s.png"%save_name)
+    fig_name = os.path.join(fig_dir, "%s.png" % save_name)
     fig.savefig(fig_name)
 
 
@@ -620,7 +625,6 @@ def save_selected_w(wmx, selection):
     :param wmx: numpy array representing the weight matrix
     :param selection: numpa array of selected neuron IDs
     """
-
     return {i:wmx[:, i] for i in selection}
 
 
@@ -636,14 +640,14 @@ def plot_weights(incomming_weights, save_name):
     sns.despine()
 
     for i, val in incomming_weights.items():
-        ax.plot(val*1e9, alpha=0.5, label="%i"%i)  # nS conversion
+        ax.plot(val*1e9, alpha=0.5, label="%i" % i)  # nS conversion
     ax.set_title("Incomming exc. weights")
     ax.set_xlabel("Neuron ID")
     ax.set_ylabel("Weight (nS)")
     ax.set_xlim([0, nPCs])
     ax.legend()
 
-    fig_name = os.path.join(fig_dir, "%s.png"%save_name)
+    fig_name = os.path.join(fig_dir, "%s.png" % save_name)
     fig.savefig(fig_name)
 
 
@@ -746,12 +750,15 @@ def plot_summary_ripple(multipliers, ripple_freqs_PC, ripple_freqs_BC, ripple_fr
     plt.close(fig)
 
 
-def plot_summary_gamma(multipliers, gamma_freqs_PC, gamma_freqs_BC, gamma_freqs_LFP, gamma_powers_PC, gamma_powers_BC, gamma_powers_LFP):
+def plot_summary_gamma(multipliers, gamma_freqs_PC, gamma_freqs_BC, gamma_freqs_LFP,
+                       gamma_powers_PC, gamma_powers_BC, gamma_powers_LFP):
     """
     Saves summary figure with ripple freq. and power
     :param multipliers: wmx multipliers
-    :param gamma_freqs_PC, gamma_freqs_BC, gamma_freqs_LFP: exc., inh. and LFP gamma frequency (have to be the same size as multipliers)
-    :param gamma_powers_PC, gamma_powers_BC, gamma_powers_LFP: exc., inh. and LFP gamma power (have to be the same size as multipliers)
+    :param gamma_freqs_PC, gamma_freqs_BC, gamma_freqs_LFP: exc., inh. and LFP gamma frequency
+                                                            (have to be the same size as multipliers)
+    :param gamma_powers_PC, gamma_powers_BC, gamma_powers_LFP: exc., inh. and LFP gamma power
+                                                               (have to be the same size as multipliers)
     """
 
     fig = plt.figure(figsize=(10, 8))
@@ -810,7 +817,8 @@ def plot_summary_AC(multipliers, max_acs_PC, max_acs_BC, max_acs_ripple_PC, max_
     Saves summary figure with maximum autocorrelations
     :param multipliers: wmx multipliers
     :param max_acs_PC, max_acs_BC: max. exc. and inh. ACs (have to be the same size as multipliers)
-    :param max_acs_ripple_PC, max_acs_ripple_BC: max. exc. and inh. ACs in ripple range (have to be the same size as multipliers)
+    :param max_acs_ripple_PC, max_acs_ripple_BC: max. exc. and inh. ACs in ripple range
+                                                 (have to be the same size as multipliers)
     """
 
     fig = plt.figure(figsize=(10, 8))
@@ -869,7 +877,7 @@ def plot_summary_BC(freqs, powers, xlabel, xticklabels, ylabel, yticklabels, sav
     ax2.set_yticks(np.arange(0, len(yticklabels))); ax2.set_yticklabels(yticklabels)
 
     fig.tight_layout()
-    fig_name = os.path.join(fig_dir, "%s.png"%save_name)
+    fig_name = os.path.join(fig_dir, "%s.png" % save_name)
     fig.savefig(fig_name)
 
 
@@ -894,7 +902,7 @@ def plot_evolution(ngen, min_fit, mean_fit, std_fit, save_name):
     ax.set_ylabel("Fittnes score")
     ax.legend()
 
-    fig_name = os.path.join(fig_dir, "%s.png"%save_name)
+    fig_name = os.path.join(fig_dir, "%s.png" % save_name)
     fig.savefig(fig_name)
 
 
@@ -911,13 +919,13 @@ def plot_SS_voltage(t, v, SS_voltage, current):
     sns.despine()
 
     ax.plot(t, v, linewidth=1.5, label="V_m")
-    ax.plot(np.linspace(800, 1000, 200), SS_voltage*np.ones(200), linewidth=1.5, label="V_SS: %.3f mV"%SS_voltage)
+    ax.plot(np.linspace(800, 1000, 200), SS_voltage*np.ones(200), linewidth=1.5, label="V_SS: %.3f mV" % SS_voltage)
     ax.set_xlabel("Time (ms)")
     ax.set_ylabel("Memb. pot. (mV)")
-    ax.set_title("Cell with %s pA input"%current)
+    ax.set_title("Cell with %s pA input" % current)
     ax.legend()
 
-    fig_name = os.path.join(fig_dir, "clamp_%s.png"%current)
+    fig_name = os.path.join(fig_dir, "clamp_%s.png" % current)
     fig.savefig(fig_name)
 
 
@@ -934,8 +942,8 @@ def plot_avg_EPS(t, EPSPs, EPSP, EPSCs, EPSC, mean_weight, save_name):
     fig = plt.figure(figsize=(10, 8))
 
     ax = fig.add_subplot(2, 1, 1)
-    ax.plot(t, np.mean(EPSPs, axis=0), "b-", label="mean of %i random weights"%EPSPs.shape[0])
-    ax.plot(t, EPSP, "g-", label="mean of all weights (%f nS)"%mean_weight)
+    ax.plot(t, np.mean(EPSPs, axis=0), "b-", label="mean of %i random weights" % EPSPs.shape[0])
+    ax.plot(t, EPSP, "g-", label="mean of all weights (%f nS)" % mean_weight)
     ax.set_title("average EPSP")
     ax.set_xlim([0, 400])
     ax.set_ylabel("EPSP (mV)")
@@ -943,8 +951,8 @@ def plot_avg_EPS(t, EPSPs, EPSP, EPSCs, EPSC, mean_weight, save_name):
 
     ax2 = fig.add_subplot(2, 1, 2)
     sns.despine()
-    ax2.plot(t, np.mean(EPSCs, axis=0), "b-", label="mean of %i random weights"%EPSCs.shape[0])
-    ax2.plot(t, EPSC, "g-", label="mean of all weights (%f nS)"%mean_weight)
+    ax2.plot(t, np.mean(EPSCs, axis=0), "b-", label="mean of %i random weights" % EPSCs.shape[0])
+    ax2.plot(t, EPSC, "g-", label="mean of all weights (%f nS)" % mean_weight)
     ax2.set_title("average EPSC")
     ax2.set_xlabel("Time (ms)")
     ax2.set_xlim([0, 400])
@@ -952,7 +960,7 @@ def plot_avg_EPS(t, EPSPs, EPSP, EPSCs, EPSC, mean_weight, save_name):
     ax2.legend()
 
     fig.tight_layout()
-    fig_name = os.path.join(fig_dir, "%s.png"%save_name)
+    fig_name = os.path.join(fig_dir, "%s.png" % save_name)
     fig.savefig(fig_name)
 
 
@@ -968,7 +976,7 @@ def plot_EPS_dist(peak_EPSPs, peak_EPSCs, save_name):
     ax = fig.add_subplot(2, 1, 1)
     ax.violinplot(peak_EPSPs, vert=False, showmeans=True, showextrema=False, showmedians=False,
                   points=peak_EPSPs.shape[0], bw_method="silverman")
-    ax.set_title("%i random EPSPs (mean: %f mV)"%(peak_EPSPs.shape[0], np.mean(peak_EPSPs)))
+    ax.set_title("%i random EPSPs (mean: %f mV)" % (peak_EPSPs.shape[0], np.mean(peak_EPSPs)))
     ax.set_xlabel("EPSP (mV)")
     ax.set_yticks([])
 
@@ -976,12 +984,12 @@ def plot_EPS_dist(peak_EPSPs, peak_EPSCs, save_name):
     sns.despine()
     ax2.violinplot(peak_EPSCs, vert=False, showmeans=True, showextrema=False, showmedians=False,
                    points=peak_EPSCs.shape[0], bw_method="silverman")
-    ax2.set_title("%i random EPSCs (mean: %f pA)"%(peak_EPSCs.shape[0], np.mean(peak_EPSCs)))
+    ax2.set_title("%i random EPSCs (mean: %f pA)" % (peak_EPSCs.shape[0], np.mean(peak_EPSCs)))
     ax2.set_xlabel("EPSC (pA)")
     ax2.set_yticks([])
 
     fig.tight_layout()
-    fig_name = os.path.join(fig_dir, "%s.png"%save_name)
+    fig_name = os.path.join(fig_dir, "%s.png" % save_name)
     fig.savefig(fig_name)
 
 
@@ -1004,7 +1012,7 @@ def plot_learned_EPSPs(delta_ts, EPSPs, save_name):
         ax.plot(t, EPSPs["baseline"], "k--", linewidth=1.5)
         col = "b" if delta_t > 0 else "r"
         ax.plot(t, EPSPs[delta_t], color=col, linewidth=2)
-        ax.set_title("$\Delta t$ /post-pre/ = %s (ms)"%delta_t)
+        ax.set_title("$\Delta t$ /post-pre/ = %s (ms)" % delta_t)
         ax.set_xlim([0, 400])
         ax.set_ylabel("EPSP (mV)")
         if i >= 4:
@@ -1012,18 +1020,20 @@ def plot_learned_EPSPs(delta_ts, EPSPs, save_name):
 
     sns.despine()
     fig.tight_layout()
-    fig_name = os.path.join(fig_dir, "%s.png"%save_name)
+    fig_name = os.path.join(fig_dir, "%s.png" % save_name)
     fig.savefig(fig_name)
 
 
 # not used in the final version...
 def plot_compare_STDP_to_orig(EPSP_changes, orig_data, save_name, orig_exp_fit=None, sim_exp_fit=None):
     """
-    Saves plot based on Figure 1 i) in Mishra et al. 2016 - 10.1038/ncomms11552, extended with the in silico EPSP changes (with fixed cell model and STDP rule)
+    Saves plot based on Figure 1 i) in Mishra et al. 2016 - 10.1038/ncomms11552,
+    extended with the in silico EPSP changes (with fixed cell model and STDP rule)
     :param EPSP_changes: dictonary with keys of delta_ts and values of EPSP changes in percentage
     :param orig_data: dictionary of original values (might not be straightforwad to understand)
     :param save_name: name of saved img
-    :param orig_exp_fit: optional dictionary with taup, taum: time constant of weight change & Ap, Am: max amplitude of weight change (fitted to original data)
+    :param orig_exp_fit: optional dictionary with taup, taum: time constant of weight change
+                         & Ap, Am: max amplitude of weight change (fitted to original data)
     :param sim_exp_fit: same dictionary as above (fitted to simulated data)
     """
 
@@ -1040,13 +1050,13 @@ def plot_compare_STDP_to_orig(EPSP_changes, orig_data, save_name, orig_exp_fit=N
     ax.plot(t_, fit_G, "r-", linewidth=2, label="Gaussian fit (orig. data)")
     if orig_exp_fit:  # plot exponential fit (to original data)
         fit_E = np.where(t_>0, orig_exp_fit["Ap"]*np.exp(-t_/orig_exp_fit["taup"]), orig_exp_fit["Am"]*np.exp(t_/orig_exp_fit["taum"]))
-        ax.plot(t_, fit_E, color="orange", linewidth=2, label="exponential fit (orig. data) taup:%.3f(ms)"%orig_exp_fit["taup"])
+        ax.plot(t_, fit_E, color="orange", linewidth=2, label="exponential fit (orig. data) taup:%.3f(ms)" % orig_exp_fit["taup"])
     # plot in silico data
     ax2 = ax.twinx()
     ax2.plot(EPSP_changes["time"], EPSP_changes["change"], "go", markersize=6, label="simulated data")
     if sim_exp_fit:  # plot exponential fit (to simulated data)
         fit_E = np.where(t_>0, sim_exp_fit["Ap"]*np.exp(-t_/sim_exp_fit["taup"]), sim_exp_fit["Am"]*np.exp(t_/sim_exp_fit["taum"]))
-        ax2.plot(t_, fit_E, "g-", linewidth=2, label="exponential fit (sim data) taup:%.3f(ms)"%sim_exp_fit["taup"])
+        ax2.plot(t_, fit_E, "g-", linewidth=2, label="exponential fit (sim data) taup:%.3f(ms)" % sim_exp_fit["taup"])
 
     ax.set_title("Compare in vitro and in silico EPSP changes")
     ax.set_xlabel("$\Delta t$ /post-pre/ (ms)")
@@ -1058,7 +1068,7 @@ def plot_compare_STDP_to_orig(EPSP_changes, orig_data, save_name, orig_exp_fit=N
     h2, l2 = ax2.get_legend_handles_labels()
     ax.legend(h1+h2, l1+l2)
 
-    fig_name = os.path.join(fig_dir, "%s.png"%save_name)
+    fig_name = os.path.join(fig_dir, "%s.png" % save_name)
     fig.savefig(fig_name)
 
 
@@ -1079,14 +1089,16 @@ def plot_STDP2(STDP_params, sim_exp_fit, save_name):
     ax = fig.add_subplot(1, 1, 1)
     sns.despine(right=False)
 
-    ax.plot(delta_t, delta_w_rule, "b-", linewidth=2, label="STDP rule taup:%s(ms), Ap:%s"%(STDP_params["taup"], STDP_params["Ap"]))
+    ax.plot(delta_t, delta_w_rule, "b-", linewidth=2,
+            label="STDP rule taup:%s(ms), Ap:%s" % (STDP_params["taup"], STDP_params["Ap"]))
     ax.axhline(0, ls="-", c="k")
     ax.set_title("STDP")
     ax.set_xlabel("$\Delta t$ /post-pre/ (ms)")
     ax.set_xlim([-150, 150])
     ax.set_ylabel("$\Delta w$ (nS)", color="blue")
     ax2 = ax.twinx()
-    ax2.plot(delta_t, delta_w_fitted, "g-", linewidth=2, label="fitted 'STDP' taup:%.3f(ms), Ap:%.3f"%(sim_exp_fit["taup"], sim_exp_fit["Ap"]))
+    ax2.plot(delta_t, delta_w_fitted, "g-", linewidth=2,
+             label="fitted 'STDP' taup:%.3f(ms), Ap:%.3f" % (sim_exp_fit["taup"], sim_exp_fit["Ap"]))
     ax2.set_ylabel("Change in EPSP amplitude (%)", color="green")
     ax.set_ylim([-1*STDP_params["Ap"]*0.05, STDP_params["Ap"]*1.05])
     ax2.set_ylim([-1*sim_exp_fit["Ap"]*0.05, sim_exp_fit["Ap"]*1.05])
@@ -1094,5 +1106,5 @@ def plot_STDP2(STDP_params, sim_exp_fit, save_name):
     h2, l2 = ax2.get_legend_handles_labels()
     ax.legend(h1+h2, l1+l2)
 
-    fig_name = os.path.join(fig_dir, "%s_sym.png"%save_name)
+    fig_name = os.path.join(fig_dir, "%s_sym.png" % save_name)
     fig.savefig(fig_name)
