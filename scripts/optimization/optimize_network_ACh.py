@@ -26,8 +26,8 @@ logger.setLevel(logging.INFO)
 
 if __name__ == "__main__":
 
-    f_in = "wmx_sym_0.5_linear.pkl"
-    cp_f_name = os.path.join(base_path, "scripts", "optimization", "checkpoints", "gamma_checkpoint_%s" % f_in[4:])
+    f_in = "wmx_sym_0.5_linear.npz"
+    cp_f_name = os.path.join(base_path, "scripts", "optimization", "checkpoints", "gamma_checkpoint_%s.pkl" % f_in[4:-4])
     hof_f_name = os.path.join(base_path, "scripts", "optimization", "checkpoints", "gamma_hof_%s.csv" % f_in[4:-4])
 
     # ACh (actually carbachol) scale factors
@@ -49,11 +49,10 @@ if __name__ == "__main__":
     offspring_size = 50
     max_ngen = 10
 
-    pklf_name = os.path.join(base_path, "files", f_in)
-    wmx_PC_E = load_wmx(pklf_name) * 1e9  # *1e9 nS conversion
+    wmx_PC_E = load_wmx(os.path.join(base_path, "files", f_in))
 
     # Create multiprocessing pool for parallel evaluation of fitness function
-    n_proc = np.max([offspring_size, mp.cpu_count()-1])
+    n_proc = np.min([offspring_size, mp.cpu_count()-1])
     pool = mp.Pool(processes=n_proc)
     # Create BluePyOpt optimization and run
     evaluator = sim_evaluator.Brian2Evaluator(True, wmx_PC_E, optconf)

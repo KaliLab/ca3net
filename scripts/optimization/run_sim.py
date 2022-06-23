@@ -144,9 +144,8 @@ def run_simulation(wmx_PC_E, w_PC_I_, w_BC_E_, w_BC_I_, wmx_mult_, w_PC_MF_, rat
 
     # weight matrix used here
     C_PC_E = Synapses(PCs, PCs, "w_exc:1", on_pre="x_ampa+=norm_PC_E*w_exc", delay=delay_PC_E)
-    nonzero_weights = np.nonzero(wmx_PC_E)
-    C_PC_E.connect(i=nonzero_weights[0], j=nonzero_weights[1])
-    C_PC_E.w_exc = wmx_PC_E[nonzero_weights].flatten()
+    C_PC_E.connect(i=wmx_PC_E.row, j=wmx_PC_E.col)
+    C_PC_E.w_exc = wmx_PC_E.data
     del wmx_PC_E
 
     C_PC_I = Synapses(BCs, PCs, on_pre="x_gaba+=norm_PC_I*w_PC_I", delay=delay_PC_I)

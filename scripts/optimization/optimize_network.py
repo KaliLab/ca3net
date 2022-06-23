@@ -55,8 +55,8 @@ if __name__ == "__main__":
     assert STDP_mode in ["sym", "asym"]
     linear = True
     place_cell_ratio = 0.5
-    f_in = "wmx_%s_%.1f_linear.pkl" % (STDP_mode, place_cell_ratio) if linear else "wmx_%s_%.1f.pkl" % (STDP_mode, place_cell_ratio)
-    cp_f_name = os.path.join(base_path, "scripts", "optimization", "checkpoints", "checkpoint_%s" % f_in[4:])
+    f_in = "wmx_%s_%.1f_linear.npz" % (STDP_mode, place_cell_ratio) if linear else "wmx_%s_%.1f.npz" % (STDP_mode, place_cell_ratio)
+    cp_f_name = os.path.join(base_path, "scripts", "optimization", "checkpoints", "checkpoint_%s.pkl" % f_in[4:-4])
     hof_f_name = os.path.join(base_path, "scripts", "optimization", "checkpoints", "hof_%s.csv" % f_in[4:-4])
 
     # parameters to be fitted as a list of: (name, lower bound, upper bound)
@@ -72,11 +72,10 @@ if __name__ == "__main__":
     offspring_size = 50
     max_ngen = 10
 
-    pklf_name = os.path.join(base_path, "files", f_in)
-    wmx_PC_E = load_wmx(pklf_name) * 1e9  # *1e9 nS conversion
+    wmx_PC_E = load_wmx(os.path.join(base_path, "files", f_in))
 
     # Create multiprocessing pool for parallel evaluation of fitness function
-    n_proc = np.max([offspring_size, mp.cpu_count()-1])
+    n_proc = np.min([offspring_size, mp.cpu_count()-1])
     pool = mp.Pool(processes=n_proc)
     # Create BluePyOpt optimization and run
     evaluator = sim_evaluator.Brian2Evaluator(linear, wmx_PC_E, optconf)

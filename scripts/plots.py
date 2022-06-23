@@ -545,7 +545,7 @@ def plot_wmx(wmx, save_name):
 
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(1, 1, 1)
-    i = ax.imshow(wmx*1e9, cmap="cividis", origin="lower", interpolation="nearest")  # nS conversion
+    i = ax.imshow(wmx, cmap="cividis", origin="lower", interpolation="nearest")  # nS conversion
     fig.colorbar(i)
     ax.set_title("Learned synaptic weights (nS)")
     ax.set_xlabel("Target neuron")
@@ -575,7 +575,7 @@ def plot_wmx_avg(wmx, n_pops, save_name):
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(1, 1, 1)
 
-    i = ax.imshow(mean_wmx*1e9, cmap="cividis", origin="lower", interpolation="nearest")
+    i = ax.imshow(mean_wmx, cmap="cividis", origin="lower", interpolation="nearest")
     fig.colorbar(i)
     ax.set_title("Learned avg. synaptic weights (nS)")
     ax.set_xlabel("Target neuron")
@@ -593,7 +593,7 @@ def plot_w_distr(wmx, save_name):
     """
 
     # deleting nulls from wmx to plot the distribution of the weights
-    wmx_nonzero = wmx[np.nonzero(wmx)]*1e9  # nS conversion
+    wmx_nonzero = wmx[np.nonzero(wmx)]
     log10wmx_nonzero = np.log10(wmx_nonzero)
     print("mean(nonzero weights): %s (nS)" % np.mean(wmx_nonzero))
 
@@ -638,9 +638,8 @@ def plot_weights(incomming_weights, save_name):
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(1, 1, 1)
     sns.despine()
-
     for i, val in incomming_weights.items():
-        ax.plot(val*1e9, alpha=0.5, label="%i" % i)  # nS conversion
+        ax.plot(val, alpha=0.5, label="%i" % i)
     ax.set_title("Incomming exc. weights")
     ax.set_xlabel("Neuron ID")
     ax.set_ylabel("Weight (nS)")

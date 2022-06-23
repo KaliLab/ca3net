@@ -31,11 +31,9 @@ def learning_2nd_env(spiking_neurons, spike_times, taup, taum, Ap, Am, wmax, int
 
     np.random.seed(12345)
     pyrandom.seed(12345)
-
-    plot_STDP_rule(taup/ms, taum/ms, Ap/1e-9, Am/1e-9, "STDP_rule")
+    #plot_STDP_rule(taup/ms, taum/ms, Ap/1e-9, Am/1e-9, "STDP_rule")
 
     PC = SpikeGeneratorGroup(nPCs, spiking_neurons, spike_times*second)
-
     STDP = Synapses(PC, PC,
             """
             w : 1
@@ -50,18 +48,16 @@ def learning_2nd_env(spiking_neurons, spike_times, taup, taum, Ap, Am, wmax, int
             A_postsyn += Am
             w = clip(w + A_presyn, 0, wmax)
             """)
-
     # initialize weights from the intermediate weight matrix
-    nonzero_weights = np.nonzero(intermediate_wmx)
-    STDP.connect(i=nonzero_weights[0], j=nonzero_weights[1])
-    STDP.w = intermediate_wmx[nonzero_weights].flatten()
+    STDP.connect(i=intermediate_wmx.row, j=intermediate_wmx.col)
+    STDP.w = intermediate_wmx.data
 
     run(400*second, report="text")
 
     weightmx = np.zeros((nPCs, nPCs))
     weightmx[STDP.i[:], STDP.j[:]] = STDP.w[:]
 
-    return weightmx
+    return weightmx * 1e9  # *1e9 nS conversion
 
 
 if __name__ == "__main__":
@@ -70,15 +66,13 @@ if __name__ == "__main__":
         STDP_mode = sys.argv[1]
     except:
         STDP_mode = "sym"
-
     assert STDP_mode in ["asym", "sym"]
 
     place_cell_ratio = 0.5
     linear = True
-
-    f_in = "spike_trains_%.1f_linear.npz"%place_cell_ratio if linear else "spike_trains_%.1f.npz"%place_cell_ratio
-    f_in_wmx = "intermediate_wmx_%s_%.1f_linear.pkl"%(STDP_mode, place_cell_ratio) if linear else "intermediate_wmx_%s_%.1f.pkl"%(STDP_mode, place_cell_ratio)
-    f_out = "wmx_%s_%.1f_2envs_linear.pkl"%(STDP_mode, place_cell_ratio) if linear else "wmx_%s_%.1f_2envs.pkl"%(STDP_mode, place_cell_ratio)
+    f_in = "spike_trains_%.1f_linear.npz" % place_cell_ratio if linear else "spike_trains_%.1f.npz" % place_cell_ratio
+    f_in_wmx = "intermediate_wmx_%s_%.1f_linear.npz" % (STDP_mode, place_cell_ratio) if linear else "intermediate_wmx_%s_%.1f.pkl" % (STDP_mode, place_cell_ratio)
+    f_out = "wmx_%s_%.1f_2envs_linear.npz" % (STDP_mode, place_cell_ratio) if linear else "wmx_%s_%.1f_2envs.pkl" % (STDP_mode, place_cell_ratio)
 
     # STDP parameters (see `optimization/analyse_STDP.py`)
     if STDP_mode == "asym":
@@ -94,22 +88,18 @@ if __name__ == "__main__":
         scale_factor = 0.62
     Ap *= wmax; Am *= wmax  # needed to reproduce Brian1 results
 
-    f_name = os.path.join(base_path, "files", f_in)
-    spiking_neurons, spike_times = load_spike_trains(f_name)
-
-    pklf_name = os.path.join(base_path, "files", f_in_wmx)
-    intermediate_weightmx = load_wmx(pklf_name) / scale_factor  # (scale only once, at the end)
+    spiking_neurons, spike_times = load_spike_trains(os.path.join(base_path, "files", f_in))
+    npzf_name = os.path.join(base_path, "files", f_in_wmx)
+    intermediate_weightmx = load_wmx(npzf_name) / (scale_factor * 1e9)  # (scale only once, at the end)
 
     weightmx = learning_2nd_env(spiking_neurons, spike_times, taup, taum, Ap, Am, wmax, intermediate_weightmx)
     weightmx *= scale_factor  # quick and dirty additional scaling! (in an ideal world the STDP parameters should be changed to include this scaling...)
 
-
-    pklf_name = os.path.join(base_path, "files", f_out)
-    save_wmx(weightmx, pklf_name)
+    save_wmx(weightmx, os.path.join(base_path, "files", f_out))
 
     plot_wmx(weightmx, save_name=f_out[:-4])
-    plot_wmx_avg(weightmx, n_pops=100, save_name="%s_avg"%f_out[:-4])
-    plot_w_distr(weightmx, save_name="%s_distr"%f_out[:-4])
+    plot_wmx_avg(weightmx, n_pops=100, save_name="%s_avg" % f_out[:-4])
+    plot_w_distr(weightmx, save_name="%s_distr" % f_out[:-4])
     selection = np.array([500, 2400, 4000, 5500, 7015])
-    plot_weights(save_selected_w(weightmx, selection), save_name="%s_sel_weights"%f_out[:-4])
+    plot_weights(save_selected_w(weightmx, selection), save_name="%s_sel_weights" % f_out[:-4])
     plt.show()

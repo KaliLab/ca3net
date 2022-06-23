@@ -118,25 +118,22 @@ if __name__ == "__main__":
 
     place_cell_ratio = 0.5
     linear = True
-    f_in = "wmx_%s_%.1f_linear.pkl"%(STDP_mode, place_cell_ratio) if linear else "wmx_%s_%.1f.pkl"%(STDP_mode, place_cell_ratio)
+    f_in = "wmx_%s_%.1f_linear.npz" % (STDP_mode, place_cell_ratio) if linear else "wmx_%s_%.1f.npz" % (STDP_mode, place_cell_ratio)
 
-    pklf_name = os.path.join(base_path, "files", f_in)
-    wmx_orig = load_wmx(pklf_name)
+    wmx_orig = load_wmx(os.path.join(base_path, "files", f_in)).toarray()
 
-    #wmx_modified = shuffle(wmx_orig); f_out = "%s_shuffled_linear.pkl"%f_in[:-11] if linear else "%s_shuffled.pkl"%f_in[:-4]
-    #wmx_modified = column_shuffle(wmx_orig); f_out = "%s_cshuffled_linear.pkl"%f_in[:-11] if linear else "%s_cshuffled.pkl"%f_in[:-4]
-    #wmx_modified = shuffle_blocks(wmx_orig); f_out = "%s_block_shuffled_linear.pkl"%f_in[:-11] if linear else "%s_block_shuffled.pkl"%f_in[:-4]
-    wmx_modified = binarize(wmx_orig); f_out = "%s_binary_linear.pkl"%f_in[:-11] if linear else "%s_binary.pkl"%f_in[:-4]
+    #wmx_modified = shuffle(wmx_orig); f_out = "%s_shuffled_linear.npz" % f_in[:-11] if linear else "%s_shuffled.npz" % f_in[:-4]
+    #wmx_modified = column_shuffle(wmx_orig); f_out = "%s_cshuffled_linear.npz" % f_in[:-11] if linear else "%s_cshuffled.npz" % f_in[:-4]
+    #wmx_modified = shuffle_blocks(wmx_orig); f_out = "%s_block_shuffled_linear.npz" % f_in[:-11] if linear else "%s_block_shuffled.npz" % f_in[:-4]
+    wmx_modified = binarize(wmx_orig); f_out = "%s_binary_linear.npz" % f_in[:-11] if linear else "%s_binary.npz" % f_in[:-4]
 
-    assert np.shape(wmx_modified) == (nPCs, nPCs), "Output shape is not %i*%i"%(nPCs, nPCs)
+    assert np.shape(wmx_modified) == (nPCs, nPCs), "Output shape is not %i*%i" % (nPCs, nPCs)
     assert (wmx_modified >= 0.0).all(), "Negative weights in the modified matrix!"
-
-    pklf_name = os.path.join(base_path, "files", f_out)
-    save_wmx(wmx_modified, pklf_name)
+    save_wmx(wmx_modified, os.path.join(base_path, "files", f_out))
 
     plot_wmx(wmx_modified, save_name=f_out[:-4])
-    plot_wmx_avg(wmx_modified, n_pops=100, save_name="%s_avg"%f_out[:-4])
-    plot_w_distr(wmx_modified, save_name="%s_distr"%f_out[:-4])
+    plot_wmx_avg(wmx_modified, n_pops=100, save_name="%s_avg" % f_out[:-4])
+    plot_w_distr(wmx_modified, save_name="%s_distr" % f_out[:-4])
     selection = np.array([500, 2400, 4000, 5500, 7015])
-    plot_weights(save_selected_w(wmx_modified, selection), save_name="%s_sel_weights"%f_out[:-4])
+    plot_weights(save_selected_w(wmx_modified, selection), save_name="%s_sel_weights" % f_out[:-4])
     plt.show()

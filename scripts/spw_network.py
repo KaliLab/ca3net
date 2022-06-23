@@ -2,7 +2,7 @@
 """
 Creates AdExpIF PC and BC populations in Brian2, loads in recurrent connection matrix for PC population
 runs simulation and checks the dynamics
-authors: András Ecker, Bence Bagi, Szabolcs Káli last update: 07.2019
+authors: András Ecker, Bence Bagi, Szabolcs Káli last update: 06.2022
 """
 
 import os
@@ -174,9 +174,8 @@ def run_simulation(wmx_PC_E, STDP_mode, cue, save, seed, verbose=True):
 
     # weight matrix used here
     C_PC_E = Synapses(PCs, PCs, "w_exc:1", on_pre="x_ampa+=norm_PC_E*w_exc", delay=delay_PC_E)
-    nonzero_weights = np.nonzero(wmx_PC_E)
-    C_PC_E.connect(i=nonzero_weights[0], j=nonzero_weights[1])
-    C_PC_E.w_exc = wmx_PC_E[nonzero_weights].flatten()
+    C_PC_E.connect(i=wmx_PC_E.row, j=wmx_PC_E.col)
+    C_PC_E.w_exc = wmx_PC_E.data
     del wmx_PC_E
 
     C_PC_I = Synapses(BCs, PCs, on_pre="x_gaba+=norm_PC_I*w_PC_I", delay=delay_PC_I)
@@ -342,15 +341,15 @@ if __name__ == "__main__":
     seed = 12345
 
     analyse_replay = True
-    TFR = True
+    TFR = False
     save = False
     verbose = True
 
-    f_in = "wmx_%s_%.1f_linear.pkl"%(STDP_mode, place_cell_ratio) if linear else "wmx_%s_%.1f.pkl" % (STDP_mode, place_cell_ratio)
+    f_in = "wmx_%s_%.1f_linear.npz" % (STDP_mode, place_cell_ratio) if linear else "wmx_%s_%.1f.pkl" % (STDP_mode, place_cell_ratio)
     PF_pklf_name = os.path.join(base_path, "files", "PFstarts_%s_linear.pkl" % place_cell_ratio) if linear else None
     dir_name = os.path.join(base_path, "figures", "%.2f_replay_det_%s_%.1f" % (1, STDP_mode, place_cell_ratio)) if linear else None
 
-    wmx_PC_E = load_wmx(os.path.join(base_path, "files", f_in)) * 1e9  # *1e9 nS conversion
+    wmx_PC_E = load_wmx(os.path.join(base_path, "files", f_in))
     SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC = run_simulation(wmx_PC_E, STDP_mode, cue=cue,
                                                                                  save=save, seed=seed, verbose=verbose)
     _ = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC, seed=seed,

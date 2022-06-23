@@ -162,9 +162,8 @@ def run_simulation(wmx_PC_E, save, seed, verbose=True):
 
     # weight matrix used here
     C_PC_E = Synapses(PCs, PCs, "w_exc:1", on_pre="x_ampa+=norm_PC_E*w_exc", delay=delay_PC_E)
-    nonzero_weights = np.nonzero(wmx_PC_E)
-    C_PC_E.connect(i=nonzero_weights[0], j=nonzero_weights[1])
-    C_PC_E.w_exc = wmx_PC_E[nonzero_weights].flatten()
+    C_PC_E.connect(i=wmx_PC_E.row, j=wmx_PC_E.col)
+    C_PC_E.w_exc = wmx_PC_E.data
     del wmx_PC_E
 
     C_PC_I = Synapses(BCs, PCs, on_pre="x_gaba+=norm_PC_I*w_PC_I", delay=delay_PC_I)
@@ -202,15 +201,15 @@ if __name__ == "__main__":
     save = False
     verbose = True
 
-    f_in = "wmx_sym_0.5_linear.pkl"
-    wmx_PC_E = load_wmx(os.path.join(base_path, "files", f_in)) * w_PC_E_scale * 1e9  # *1e9 nS conversion
+    f_in = "wmx_sym_0.5_linear.npz"
+    wmx_PC_E = load_wmx(os.path.join(base_path, "files", f_in)) * w_PC_E_scale
 
     SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC = run_simulation(wmx_PC_E,
                                                                                  save=save, seed=seed, verbose=verbose)
     results = analyse_results(SM_PC, SM_BC, RM_PC, RM_BC, selection, StateM_PC, StateM_BC, seed=seed,
                               multiplier=1, linear=True, pklf_name=None, dir_name=None,
                               analyse_replay=False, TFR=False, save=save, verbose=False)
-    if verbose:  # bypassing verbose=True in `analyse_results` with gamma related metrics
+    if verbose:  # bypassing `verbose=True` in `analyse_results` with gamma related metrics
         print("Mean excitatory rate: %.3f" % results[2])
         print("Mean inhibitory rate: %.3f" % results[3])
         print("Average exc. gamma freq: %.3f" % results[10])
