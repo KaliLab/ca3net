@@ -18,7 +18,7 @@ infield_rate = 20.0  # avg. in-field firing rate [Hz]
 t_max = 405.0  # [s]
 
 
-def generate_spike_train(n_neurons, place_cell_ratio, linear, ordered=True, seed=1234):
+def generate_spike_train(n_neurons, place_cell_ratio, linear, ordered=True, seed=8888):
     """
     Generates hippocampal like spike trains (used later for learning the weights via STDP)
     :param n_neurons: #{neurons}
@@ -76,7 +76,7 @@ def generate_spike_train(n_neurons, place_cell_ratio, linear, ordered=True, seed
             spike_train = hom_poisson(outfield_rate, 100, t_max, seed)
         spike_trains.append(spike_train)
         seed += 1
-
+    
     return spike_trains
 
 
@@ -93,4 +93,5 @@ if __name__ == "__main__":
     spike_trains = refractoriness(spike_trains)  # clean spike train (based on refractory period)
 
     npzf_name = os.path.join(base_path, "files", f_out)
-    np.savez(npzf_name, spike_trains=spike_trains)
+    np.savez(npzf_name, *spike_trains)
+    
