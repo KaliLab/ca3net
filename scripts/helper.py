@@ -1,13 +1,15 @@
 # -*- coding: utf8 -*-
 """
 Helper functions used here and there
-author: András Ecker, last update: 06.2019
+author: András Ecker, last update: 06.2022
 """
 
 import os
+from shutil import rmtree
 import pickle
 from copy import deepcopy
 import numpy as np
+from scipy.sparse import coo_matrix, save_npz, load_npz
 import pywt
 from brian2.units import *
 from poisson_proc import hom_poisson, get_tuning_curve_linear
@@ -166,6 +168,18 @@ def reorder_spiking_neurons(spiking_neurons, pklf_name_tuning_curves):
 # ========== saving & loading ==========
 
 
+def create_dir(dir_name):
+    """
+    Deletes dir (if exists) and creates a new one with
+    :param dir_name: string: full path of the directory to be created
+    """
+    if os.path.isdir(dir_name):
+        rmtree(dir_name)
+        os.mkdir(dir_name)
+    else:
+        os.mkdir(dir_name)
+
+
 def save_place_fields(place_fields, pklf_name):
     """
     Save place field starts and corresponding neuron IDs for further analysis (see `bayesian_decoding.py`)
@@ -301,29 +315,24 @@ def save_gavg_step_sizes(step_sizes, phases, avg_step_sizes, seeds, f_name="gavg
         pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def save_wmx(weightmx, pklf_name):
+def save_wmx(weightmx, npzf_name):
     """
-    Saves excitatory weight matrix
+    Saves excitatory weight matrix (as a `scipy.sparse` matrix)
     :param weightmx: synaptic weight matrix to save
-    :param pklf_name: file name of the saved weight matrix
+    :param npzf_name: file name of the saved weight matrix
     """
+    np.fill_diagonal(weightmx, 0.0)  # just to make sure
+    sparse_weightmx = coo_matrix(weightmx)  # convert to COO
+    save_npz(npzf_name, sparse_weightmx)
 
-    np.fill_diagonal(weightmx, 0.0)
-    with open(pklf_name, "wb") as f:
-        pickle.dump(weightmx, f, protocol=pickle.HIGHEST_PROTOCOL)
 
-
-def load_wmx(pklf_name):
+def load_wmx(npzf_name):
     """
     Dummy function to load in the excitatory weight matrix and make python clear the memory
-    :param pklf_name: file name of the saved weight matrix
-    :return: wmx_PC_E: excitatory weight matrix
+    :param npzf_name: file name of the saved weight matrix
+    :return: excitatory weight matrix
     """
-
-    with open(pklf_name, "rb") as f:
-        wmx_PC_E = pickle.load(f, encoding="latin1")
-
-    return wmx_PC_E
+    return load_npz(npzf_name)
 
 
 def load_spikes(pklf_name):

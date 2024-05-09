@@ -1,7 +1,8 @@
 # -*- coding: utf8 -*-
 """
-Optimizes connection parameters (synaptic weights)
-authors: Bence Bagi, András Ecker last update: 12.2021
+Mostly a copy-paste of `optimize_network.py` but this one is optimized for gamma oscillation in presence of ACh
+(Optimizes connection parameters (synaptic weights))
+author: András Ecker last update: 03.2022
 """
 
 import os, sys, logging
@@ -9,7 +10,8 @@ import numpy as np
 import pandas as pd
 import bluepyopt as bpop
 import multiprocessing as mp
-import sim_evaluator
+import sim_evaluator_gamma as sim_evaluator
+from optimize_network import load_checkpoints, hof2csv
 base_path = os.path.sep.join(os.path.abspath("__file__").split(os.path.sep)[:-3])
 # add "scripts" directory to the path (to import modules)
 sys.path.insert(0, os.path.sep.join([base_path, "scripts"]))
@@ -22,51 +24,26 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
-def load_checkpoints(pklf_name):
-    """
-    Loads in saved checkpoints from pickle file (used e.g. to repeat the analysis part...)
-    :param pklf_name: name of the saved pickle file
-    :return: obejects saved by BluePyOpt"""
-    import pickle
-    with open(pklf_name, "rb") as f:
-        cp = pickle.load(f)
-    return cp["generation"], cp["halloffame"], cp["logbook"], cp["history"]
-
-
-def hof2csv(pnames, hof, f_name):
-    """
-    Creates pandas DaataFrame from hall of fame and saves it to csv
-    :param pnames: names of optimized parameters
-    :param hof: BluePyOpt HallOfFame object
-    :param f_name: name of the saved file
-    """
-    data = np.zeros((len(hof), len(pnames)))
-    for i in range(len(hof)):
-        data[i, :] = hof[i]
-    df = pd.DataFrame(data=data, columns=pnames)
-    df.to_csv(f_name)
-
-
 if __name__ == "__main__":
-    try:
-        STDP_mode = sys.argv[1]
-    except:
-        STDP_mode = "sym"
-    assert STDP_mode in ["sym", "asym"]
-    linear = True
-    place_cell_ratio = 0.5
-    f_in = "wmx_%s_%.1f_linear.npz" % (STDP_mode, place_cell_ratio) if linear else "wmx_%s_%.1f.npz" % (STDP_mode, place_cell_ratio)
-    cp_f_name = os.path.join(base_path, "scripts", "optimization", "checkpoints", "checkpoint_%s.pkl" % f_in[4:-4])
-    hof_f_name = os.path.join(base_path, "scripts", "optimization", "checkpoints", "hof_%s.csv" % f_in[4:-4])
 
-    # parameters to be fitted as a list of: (name, lower bound, upper bound)
+    f_in = "wmx_sym_0.5_linear.npz"
+    cp_f_name = os.path.join(base_path, "scripts", "optimization", "checkpoints", "gamma_checkpoint_%s.pkl" % f_in[4:-4])
+    hof_f_name = os.path.join(base_path, "scripts", "optimization", "checkpoints", "gamma_hof_%s.csv" % f_in[4:-4])
+
+    # ACh (actually carbachol) scale factors
+    PC_E_ACh = 0.255  # PC EXC drops to 25.5% in Norbert's data
+    PC_I_ACh = 0.28  # PC INH drops to 28% in Norbert's data
+    BC_E_ACh = 0.4  # PVBC EXC drops to 40% in Norbert's data
+    BC_I_ACh = np.mean([PC_E_ACh, PC_I_ACh, BC_E_ACh])  # no experimental data for this connection ...
+    range_ACh = [-0.1, 0.1]  # % "wiggle room" for the above specified values...
+    # parameters to be fitted as a list of: (name, lower bound, upper bound) - ripple optimize * ACh scale factors
     # the order matters! if you want to add more parameters - update `run_sim.py` too
-    optconf = [("w_PC_I_", 0.1, 2.0),
-               ("w_BC_E_", 0.1, 2.0),
-               ("w_BC_I_", 1.0, 8.0),
-               ("wmx_mult_", 0.5, 2.0),
-               ("w_PC_MF_", 15.0, 25.0),
-               ("rate_MF_", 5.0, 20.0)]
+    optconf = [("w_PC_I_", 0.65 * (PC_I_ACh + range_ACh[0]), 0.65 * (PC_I_ACh + range_ACh[1])),
+               ("w_BC_E_", 0.85 * (BC_E_ACh + range_ACh[0]), 0.85 * (BC_E_ACh + range_ACh[1])),
+               ("w_BC_I_", 5 * (BC_I_ACh + range_ACh[0]), 5 * (BC_I_ACh + range_ACh[1])),
+               ("wmx_mult_", 0.62 * (PC_E_ACh + range_ACh[0]), 0.62 * (PC_E_ACh + range_ACh[1])),
+               ("w_PC_MF_", 20.0, 30.0),
+               ("rate_MF_", 10.0, 20.0)]
     pnames = [name for name, _, _ in optconf]
 
     offspring_size = 50
@@ -78,7 +55,7 @@ if __name__ == "__main__":
     n_proc = np.min([offspring_size, mp.cpu_count()-1])
     pool = mp.Pool(processes=n_proc)
     # Create BluePyOpt optimization and run
-    evaluator = sim_evaluator.Brian2Evaluator(linear, wmx_PC_E, optconf)
+    evaluator = sim_evaluator.Brian2Evaluator(True, wmx_PC_E, optconf)
     opt = bpop.optimisations.DEAPOptimisation(evaluator, offspring_size=offspring_size, map_function=pool.map,
                                               eta=20, mutpb=0.3, cxpb=0.7)
 
@@ -90,6 +67,7 @@ if __name__ == "__main__":
     # summary figure (about optimization)
     plot_evolution(log.select("gen"), np.array(log.select("min")), np.array(log.select("avg")),
                    np.array(log.select("std")), "fittnes_evolution")
+    # pop, hof, log, hist = load_checkpoints(cp_f_name)
 
     # save hall of fame to csv, get best individual, and rerun with best parameters to save figures
     hof2csv(pnames, hof, hof_f_name)

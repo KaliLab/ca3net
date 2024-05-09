@@ -1,8 +1,10 @@
 # -*- coding: utf8 -*-
 """
-Runs single simulation (used by `optimize_network.py`)
-Parameters are duplicated from `spw_network.py`... but this is the easiest way to implement
-authors: Bence Bagi, András Ecker last update: 12.2021
+Mostly a copy-paste of `run_sim.py` but this one has an additional current injection to PCs
+to mimick ~10mV depolarization in the presence of ACh (actually carbachol)
+(Runs single simulation (used by `optimize_network.py`)
+Parameters are duplicated from `spw_network.py`... but this is the easiest way to implement)
+author: András Ecker, last update: 03.2022
 """
 
 import os
@@ -82,8 +84,9 @@ b_BC = 0.916098931234532 * pA
 tau_w_BC = 178.581099914024 * ms
 
 eqs_PC = """
-dvm/dt = (-g_leak_PC*(vm-Vrest_PC) + g_leak_PC*delta_T_PC*exp((vm- theta_PC)/delta_T_PC) - w - ((g_ampa+g_ampaMF)*z*(vm-Erev_E) + g_gaba*z*(vm-Erev_I)))/Cm_PC : volt (unless refractory)
+dvm/dt = (-g_leak_PC*(vm-Vrest_PC) + g_leak_PC*delta_T_PC*exp((vm- theta_PC)/delta_T_PC) - w + depol_ACh - ((g_ampa+g_ampaMF)*z*(vm-Erev_E) + g_gaba*z*(vm-Erev_I)))/Cm_PC : volt (unless refractory)
 dw/dt = (a_PC*(vm-Vrest_PC) - w) / tau_w_PC : amp
+depol_ACh: amp
 dg_ampa/dt = (x_ampa - g_ampa) / rise_PC_E : 1
 dx_ampa/dt = -x_ampa / decay_PC_E : 1
 dg_ampaMF/dt = (x_ampaMF - g_ampaMF) / rise_PC_MF : 1
@@ -132,6 +135,7 @@ def run_simulation(wmx_PC_E, w_PC_I_, w_BC_E_, w_BC_I_, wmx_mult_, w_PC_MF_, rat
                       reset="vm=Vreset_PC; w+=b_PC", refractory=tref_PC, method="exponential_euler")
     PCs.vm = Vrest_PC
     PCs.g_ampa, PCs.g_ampaMF, PCs.g_gaba = 0.0, 0.0, 0.0
+    PCs.depol_ACh = 40 * pA  # ACh induced ~10 mV depolarization in PCs
 
     BCs = NeuronGroup(nBCs, model=eqs_BC, threshold="vm>spike_th_BC",
                       reset="vm=Vreset_BC", refractory=tref_BC, method="exponential_euler")

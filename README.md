@@ -1,6 +1,6 @@
 ## Data-driven network model of CA3 - featuring sequence replay and ripple oscillation
 
-Code repository of the preprint: https://www.biorxiv.org/content/10.1101/2021.02.18.431868v1
+Code repository of the [eLife article _"Hippocampal sharp wave-ripples and the associated sequence replay emerge from structured synaptic interactions in a network model of area CA3"_](https://elifesciences.org/articles/71850)
 
 To run:
 

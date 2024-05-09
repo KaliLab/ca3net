@@ -4,5 +4,6 @@ matplotlib
 seaborn
 pandas
 brian2
+bluepyopt
 PyWavelets
 tqdm
