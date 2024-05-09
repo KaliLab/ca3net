@@ -93,4 +93,4 @@ if __name__ == "__main__":
     spike_trains = refractoriness(spike_trains)  # clean spike train (based on refractory period)
 
     npzf_name = os.path.join(base_path, "files", f_out)
-    np.savez(npzf_name, spike_trains=spike_trains)
+    np.savez(npzf_name, *spike_trains)
