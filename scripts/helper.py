@@ -87,7 +87,7 @@ def _avg_rate(rate, bin_, zoomed=False):
     t0 = 0 if not zoomed else 9900
     t1 = np.arange(t0, len_sim, bin_)
     t2 = t1 + bin_
-    avg_rate = np.zeros_like(t1, dtype=np.float)
+    avg_rate = np.zeros_like(t1, dtype=float)
     for i, (t1_, t2_) in enumerate(zip(t1, t2)):
         avg_ = np.mean(rate[np.where((t1_ <= t) & (t < t2_))])
         if avg_ != 0.:
@@ -367,7 +367,7 @@ def load_spike_trains(npzf_name):
     """
 
     npz_f = np.load(npzf_name, allow_pickle=True)
-    spike_trains = npz_f["spike_trains"]
+    spike_trains = [npz_f[i] for i in npz_f]
 
     spiking_neurons = 0 * np.ones_like(spike_trains[0])
     spike_times = np.asarray(spike_trains[0])
