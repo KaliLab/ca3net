@@ -300,8 +300,9 @@ def plot_zoomed(spike_times, spiking_neurons, rate, title_, color_, multiplier_,
         ax3 = fig.add_subplot(gs[2])
         sns.despine(ax=ax3)
         if len(idx) != 0:
-            ax3.plot(t[np.where((zoom_from <= t) & (t < len_sim))], v[np.where((zoom_from <= t) & (t < len_sim))], linewidth=2, c=color_,)
-            tmp = spike_th_PC * np.ones_like(idx, dtype=float) if PC_pop else spike_th_BC * np.ones_like(idx, dtype=float)
+            ax3.plot(t[np.where((zoom_from <= t) & (t < len_sim))],
+                     v[np.where((zoom_from <= t) & (t < len_sim))], linewidth=2, c=color_,)
+            tmp = spike_th_PC * np.ones_like(idx, dtype=np.float) if PC_pop else spike_th_BC * np.ones_like(idx, dtype=np.float)
             ax3.plot(spike_times[idx], tmp, c="red", marker=".", linewidth=0, label=id_)
         else:
             ax3.plot(t[np.where((zoom_from <= t) & (t < len_sim))],
